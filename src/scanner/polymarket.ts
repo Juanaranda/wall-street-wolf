@@ -67,8 +67,8 @@ export class PolymarketClient {
         asks: response.data.asks.map(toLevel),
         timestamp: new Date(),
       };
-    } catch (err) {
-      logger.warn('PolymarketClient.fetchOrderBook failed', { conditionId, err });
+    } catch (err: any) {
+      logger.warn(`PolymarketClient.fetchOrderBook failed: ${err?.message ?? String(err)} (status: ${err?.response?.status ?? 'n/a'})`, { conditionId });
       return null;
     }
   }
@@ -91,8 +91,8 @@ export class PolymarketClient {
         price: d.p,
         volume: d.v,
       }));
-    } catch (err) {
-      logger.warn('PolymarketClient.fetchMarketHistory failed', { conditionId, err });
+    } catch (err: any) {
+      logger.warn(`PolymarketClient.fetchMarketHistory failed: ${err?.message ?? String(err)} (status: ${err?.response?.status ?? 'n/a'})`, { conditionId });
       return [];
     }
   }

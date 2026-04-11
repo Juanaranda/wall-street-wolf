@@ -27,7 +27,9 @@ export class KalshiExecutor {
       const method = (config.method ?? 'GET').toUpperCase();
       const url = new URL(config.url ?? '', baseUrl);
       const pathAndQuery = url.pathname + (url.search ?? '');
-      const body = config.data ? JSON.stringify(config.data) : '';
+      const body = config.data
+        ? (typeof config.data === 'string' ? config.data : JSON.stringify(config.data))
+        : '';
 
       const signer = createSign('RSA-SHA256');
       signer.update(timestampMs + method + pathAndQuery + body);
@@ -75,9 +77,10 @@ export class KalshiExecutor {
       }
     }
 
-    // Kalshi prices in cents (0–99)
-    const priceInCents = Math.round(req.limitPrice * 100);
-    const contractCount = Math.round(req.sizeUsd); // 1 contract = $1 face value
+    // Kalshi prices in cents (1–99, never 0 or 100)
+    const priceInCents = Math.min(99, Math.max(1, Math.round(req.limitPrice * 100)));
+    // Minimum 1 contract, rounded down to avoid over-sizing
+    const contractCount = Math.max(1, Math.floor(req.sizeUsd));
 
     const payload: KalshiOrderPayload = {
       ticker: req.marketId,

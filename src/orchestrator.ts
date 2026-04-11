@@ -14,8 +14,11 @@ import { MarketSignal } from './shared/types';
 /** Tracks open positions pending resolution */
 interface TrackedPosition {
   marketId: string;
+  tradeId: string;
   predictedProbability: number;
   direction: 'yes' | 'no';
+  entryPrice: number;
+  size: number;
   expiresAt: Date;
 }
 
@@ -46,7 +49,8 @@ export class TradingOrchestrator {
     );
 
     this.researcher = new ResearchAgent(
-      process.env['NEWS_API_KEY'] ?? ''
+      process.env['NEWS_API_KEY'] ?? '',
+      (question) => this.compound.getRelevantLessons(question).map((l) => l.lesson)
     );
 
     this.predictor = new PredictionEngine(
@@ -97,6 +101,7 @@ export class TradingOrchestrator {
     }
 
     logger.info('Orchestrator: starting pipeline cycle');
+    this.researcher.clearCache();
 
     // Step 1: Scan
     const signals = await this.scanner.scan();
@@ -154,10 +159,14 @@ export class TradingOrchestrator {
 
       // Track position for outcome resolution + concurrent position guard
       if (prediction.direction === 'yes' || prediction.direction === 'no') {
+        const record = this.compound.recordExecution(tradeResult, prediction, market.question);
         this.openPositions.set(market.id, {
           marketId: market.id,
+          tradeId: record.tradeId,
           predictedProbability: prediction.modelProbability,
           direction: prediction.direction,
+          entryPrice: tradeResult.filledPrice,
+          size: tradeResult.filledSize,
           expiresAt: market.expiresAt,
         });
         this.riskGuard.openPosition(
@@ -168,9 +177,6 @@ export class TradingOrchestrator {
           tradeResult.filledPrice
         );
       }
-
-      // Step 6: Compound
-      this.compound.recordExecution(tradeResult, prediction, market.question);
 
       logger.info(`Orchestrator: trade placed on ${market.id}`, {
         direction: tradeResult.direction,
@@ -296,11 +302,17 @@ export class TradingOrchestrator {
         }
 
         if (outcome !== null) {
+          const exitPrice = outcome ? 1 : 0;
+          // pnl = (exit - entry) * size for YES; (entry - exit) * size for NO
+          const pnl = pos.direction === 'yes'
+            ? (exitPrice - pos.entryPrice) * pos.size
+            : ((1 - exitPrice) - (1 - pos.entryPrice)) * pos.size;
+
+          this.compound.recordSettlement(pos.tradeId, outcome, exitPrice, pnl);
           this.predictor.recordOutcome(pos.marketId, pos.predictedProbability, outcome);
-          // Close position in RiskGuard: resolved YES → price=1, NO → price=0
-          this.riskGuard.closePosition(pos.marketId, outcome ? 1 : 0);
+          this.riskGuard.closePosition(pos.marketId, exitPrice);
           this.openPositions.delete(pos.marketId);
-          logger.info(`Orchestrator: recorded outcome for ${pos.marketId}`, { outcome });
+          logger.info(`Orchestrator: recorded outcome for ${pos.marketId}`, { outcome, pnl });
         }
       } catch (err) {
         logger.warn(`Orchestrator: could not resolve ${pos.marketId}`, { err });

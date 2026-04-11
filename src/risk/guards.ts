@@ -144,7 +144,10 @@ export class RiskGuard {
     if (idx === -1) return;
 
     const pos = this.state.portfolio.openPositions[idx]!;
-    const pnl = (exitPrice - pos.entryPrice) * pos.size;
+    // For NO positions, profit comes from the market resolving NO (yes price → 0)
+    const pnl = pos.direction === 'yes'
+      ? (exitPrice - pos.entryPrice) * pos.size
+      : ((1 - exitPrice) - (1 - pos.entryPrice)) * pos.size;
     this.state.portfolio.openPositions.splice(idx, 1);
     this.recordSettlement(pnl);
     logger.debug('RiskGuard: position closed', { marketId, exitPrice, pnl });
@@ -165,11 +168,16 @@ export class RiskGuard {
     this.state.portfolio.dailyPnl += pnl;
     this.state.portfolio.totalPnl += pnl;
 
+    // Update peak bankroll so drawdown tracks the true high-water mark
+    if (this.state.portfolio.availableCash > this.state.portfolio.totalBankroll) {
+      this.state.portfolio.totalBankroll = this.state.portfolio.availableCash;
+    }
+
     if (pnl < 0) this.state.dailyLossUsd += Math.abs(pnl);
 
     const peakBankroll = this.state.portfolio.totalBankroll;
     const currentBankroll = this.state.portfolio.availableCash;
-    const drawdown = (peakBankroll - currentBankroll) / peakBankroll;
+    const drawdown = peakBankroll > 0 ? (peakBankroll - currentBankroll) / peakBankroll : 0;
     this.state.portfolio.maxDrawdown = Math.max(this.state.portfolio.maxDrawdown, drawdown);
   }
 
@@ -262,7 +270,7 @@ export class RiskGuard {
     };
   }
 
-  private failCheck(name: string, value: number, threshold: number, reason: string): RiskCheck {
+  private failCheck(name: string, value: number, threshold: number, _reason: string): RiskCheck {
     return { name, passed: false, value, threshold };
   }
 

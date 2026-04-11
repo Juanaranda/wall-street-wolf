@@ -24,9 +24,23 @@ const CATEGORY_SOURCES: Record<string, string> = {
 
 export class ContentScraper {
   private readonly newsApiKey: string;
+  private newsApiQueue: Promise<void> = Promise.resolve();
+  private readonly NEWS_API_MIN_INTERVAL_MS = 1200; // 1 req/sec max on free tier
 
   constructor(newsApiKey: string = '') {
     this.newsApiKey = newsApiKey;
+  }
+
+  /**
+   * Serial queue for NewsAPI calls — prevents concurrent requests from bypassing the rate limit.
+   * Each call waits for the previous one to finish + the interval delay.
+   */
+  private throttleNewsApi(): Promise<void> {
+    const next = this.newsApiQueue.then(
+      () => new Promise<void>((r) => setTimeout(r, this.NEWS_API_MIN_INTERVAL_MS))
+    );
+    this.newsApiQueue = next;
+    return next;
   }
 
   /** Scrape news articles — uses focused query + category-specific sources */
@@ -39,6 +53,7 @@ export class ContentScraper {
     const sources = CATEGORY_SOURCES[category] ?? CATEGORY_SOURCES['general'];
 
     try {
+      await this.throttleNewsApi();
       const response = await axios.get<{ articles: NewsApiArticle[]; totalResults: number }>(
         'https://newsapi.org/v2/everything',
         {
@@ -70,8 +85,12 @@ export class ContentScraper {
         sourcePlatform: 'news' as const,
         domainCredibility: this.creditabilityScore(a.url),
       }));
-    } catch (err) {
-      logger.warn('ContentScraper.scrapeNews failed', { query, err });
+    } catch (err: any) {
+      if (err?.response?.status === 429) {
+        logger.warn('ContentScraper.scrapeNews: NewsAPI rate limit hit — skipping');
+      } else {
+        logger.warn('ContentScraper.scrapeNews failed', { query, err: err?.message });
+      }
       return [];
     }
   }
@@ -79,6 +98,7 @@ export class ContentScraper {
   /** Broader news search without source filter — fallback */
   private async scrapeNewsGeneral(query: string, limit: number): Promise<ScrapedItem[]> {
     try {
+      await this.throttleNewsApi();
       const response = await axios.get<{ articles: NewsApiArticle[] }>(
         'https://newsapi.org/v2/everything',
         {

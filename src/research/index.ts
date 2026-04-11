@@ -9,23 +9,41 @@ import { SourceAnalysis } from './types';
 export class ResearchAgent {
   private readonly scraper: ContentScraper;
   private readonly sentiment: SentimentAnalyzer;
+  private readonly lessonsProvider?: (question: string) => string[];
+  // Cache keyed by search query — cleared each scan cycle via clearCache()
+  private readonly cache: Map<string, ResearchBrief> = new Map();
 
-  constructor(newsApiKey: string = '') {
+  constructor(newsApiKey: string = '', lessonsProvider?: (question: string) => string[]) {
     this.scraper = new ContentScraper(newsApiKey);
     this.sentiment = new SentimentAnalyzer();
+    this.lessonsProvider = lessonsProvider;
+  }
+
+  /** Clear the per-cycle cache — call at the start of each scan cycle */
+  clearCache(): void {
+    this.cache.clear();
   }
 
   /** Run full research pipeline for a market signal */
   async research(signal: MarketSignal): Promise<ResearchBrief> {
     const { market } = signal;
     const category = market.category ?? 'general';
+
+    // Build query first so we can check cache before doing any API calls
+    const searchQuery = buildSearchQuery(market.question, category);
+    const cacheKey = `${category}:${searchQuery}`;
+
+    if (this.cache.has(cacheKey)) {
+      const cached = this.cache.get(cacheKey)!;
+      logger.debug(`ResearchAgent: cache hit for "${searchQuery}" — reusing results for ${market.id}`);
+      // Return a copy with the correct marketId and current price
+      return { ...cached, marketId: market.id, currentMarketPrice: market.yesPrice };
+    }
+
     logger.info(`ResearchAgent: researching market ${market.id}`, {
       question: market.question,
       category,
     });
-
-    // Build smart, focused query from the market question
-    const searchQuery = buildSearchQuery(market.question, category);
     const subreddit = getSubreddit(category);
 
     // Stocktwits symbol extraction for finance/crypto markets
@@ -70,11 +88,12 @@ export class ResearchAgent {
     const estimatedEdge = sentimentImpliedP - market.yesPrice;
 
     const structuredSummary = formatStructuredData(structuredPoints);
-    const summary = this.buildSummary(market.question, label, score, market.yesPrice, estimatedEdge, consensus, structuredSummary);
+    const pastLessons = this.lessonsProvider ? this.lessonsProvider(market.question) : [];
+    const summary = this.buildSummary(market.question, label, score, market.yesPrice, estimatedEdge, consensus, structuredSummary, pastLessons);
 
     logger.info(`ResearchAgent: found ${newsItems.length} news, ${redditItems.length} reddit, ${stocktwitsItems.length} stocktwits, ${structuredPoints.length} structured data points`);
 
-    return {
+    const brief: ResearchBrief = {
       marketId: market.id,
       sentiment: label,
       sentimentScore: score,
@@ -85,6 +104,9 @@ export class ResearchAgent {
       summary,
       timestamp: new Date(),
     };
+
+    this.cache.set(cacheKey, brief);
+    return brief;
   }
 
   /** Run research for multiple signals in parallel */
@@ -114,16 +136,21 @@ export class ResearchAgent {
     marketPrice: number,
     edge: number,
     consensus: string,
-    structuredData: string = ''
+    structuredData: string = '',
+    pastLessons: string[] = []
   ): string {
     const edgeStr = edge > 0 ? `+${(edge * 100).toFixed(1)}%` : `${(edge * 100).toFixed(1)}%`;
+    const lessonsSection = pastLessons.length > 0
+      ? ` PAST FAILURES ON SIMILAR MARKETS: ${pastLessons.map((l, i) => `(${i + 1}) ${l}`).join(' ')}`
+      : '';
     return (
       `Market: "${question}". ` +
       `Sentiment: ${label} (score: ${score.toFixed(3)}). ` +
       `Source consensus: ${consensus} ` +
       `Market price: ${(marketPrice * 100).toFixed(1)}%. ` +
       `Estimated edge: ${edgeStr}.` +
-      structuredData
+      structuredData +
+      lessonsSection
     );
   }
 

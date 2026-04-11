@@ -42,11 +42,12 @@ export class PerformanceAnalyzer {
     );
     const sharpeRatio = stdPnl > 0 ? (avgPnl / stdPnl) * Math.sqrt(252) : 0;
 
-    // Max drawdown
-    let peak = 0, maxDrawdown = 0, running = 0;
+    // Max drawdown — start peak at initialBankroll proxy (first running value)
+    let running = 0, peak = 0, maxDrawdown = 0;
     for (const pnl of pnls) {
       running += pnl;
       if (running > peak) peak = running;
+      // Only measure drawdown once we have a positive peak (avoid divide-by-zero)
       const drawdown = peak > 0 ? (peak - running) / peak : 0;
       if (drawdown > maxDrawdown) maxDrawdown = drawdown;
     }
@@ -159,13 +160,7 @@ export class PerformanceAnalyzer {
       return { failureCategory: record.failureCategory, lesson: record.failureReason ?? 'No reason provided.' };
     }
 
-    if (Math.abs(edge) < 0.05) {
-      return {
-        failureCategory: 'bad_prediction',
-        lesson: `Predicted ${(record.predictedProbability * 100).toFixed(1)}% but market was ${(record.marketProbabilityAtEntry * 100).toFixed(1)}%. Edge was marginal — below threshold trades are risky.`,
-      };
-    }
-
+    // External shock: large price move from entry to exit regardless of prediction quality
     if (record.entryPrice && record.exitPrice) {
       const priceMoved = Math.abs(record.exitPrice - record.entryPrice) / record.entryPrice;
       if (priceMoved > 0.15) {
@@ -174,6 +169,41 @@ export class PerformanceAnalyzer {
           lesson: `Large unexpected price move (${(priceMoved * 100).toFixed(1)}%). Market conditions changed rapidly — consider event-driven exit triggers.`,
         };
       }
+    }
+
+    // Bad execution: filled price was significantly worse than the quoted market price at entry
+    // Only applies when entry was a YES position (entryPrice ≈ yes probability)
+    if (record.entryPrice && record.direction === 'yes') {
+      const executionSlippage = Math.abs(record.entryPrice - record.marketProbabilityAtEntry);
+      if (executionSlippage > 0.05) {
+        return {
+          failureCategory: 'bad_execution',
+          lesson: `Filled at ${(record.entryPrice * 100).toFixed(1)}% vs quoted ${(record.marketProbabilityAtEntry * 100).toFixed(1)}% — slippage of ${(executionSlippage * 100).toFixed(1)}%. Use tighter limit orders or skip illiquid markets.`,
+        };
+      }
+    }
+
+    // Bad timing: prediction was directionally correct (good edge) but trade still lost
+    // Implies entry/exit timing was the issue, not the prediction itself
+    if (edge > 0.05) {
+      const daysHeld = record.closedAt && record.openedAt
+        ? (record.closedAt.getTime() - record.openedAt.getTime()) / (1000 * 60 * 60 * 24)
+        : null;
+      const timingNote = daysHeld !== null
+        ? ` Position held ${daysHeld.toFixed(1)} days.`
+        : '';
+      return {
+        failureCategory: 'bad_timing',
+        lesson: `Edge of ${(edge * 100).toFixed(1)}% was solid but trade lost — market moved against us before resolution.${timingNote} Consider scaling in or using time-based exits.`,
+      };
+    }
+
+    // Bad prediction: edge was marginal or prediction was wrong
+    if (Math.abs(edge) < 0.05) {
+      return {
+        failureCategory: 'bad_prediction',
+        lesson: `Predicted ${(record.predictedProbability * 100).toFixed(1)}% but market was ${(record.marketProbabilityAtEntry * 100).toFixed(1)}%. Edge was marginal — below threshold trades are risky.`,
+      };
     }
 
     return {

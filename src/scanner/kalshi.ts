@@ -29,7 +29,9 @@ export class KalshiClient {
       // Build path + query string
       const url = new URL(config.url ?? '', this.baseUrl);
       const pathAndQuery = url.pathname + (url.search ?? '');
-      const body = config.data ? JSON.stringify(config.data) : '';
+      const body = config.data
+        ? (typeof config.data === 'string' ? config.data : JSON.stringify(config.data))
+        : '';
 
       const msgToSign = timestampMs + method + pathAndQuery + body;
 
@@ -61,8 +63,8 @@ export class KalshiClient {
         { params: { limit, status: 'open' } }
       );
       return response.data.markets.map((m) => this.normalize(m));
-    } catch (err) {
-      logger.error('KalshiClient.fetchActiveMarkets failed', { err });
+    } catch (err: any) {
+      logger.error(`KalshiClient.fetchActiveMarkets failed: ${err?.message ?? String(err)} (status: ${err?.response?.status ?? 'n/a'})`);
       return [];
     }
   }
@@ -70,26 +72,26 @@ export class KalshiClient {
   async fetchOrderBook(ticker: string): Promise<OrderBook | null> {
     try {
       const response = await this.http.get<{
-        orderbook: {
-          yes: Array<[number, number]>;
-          no: Array<[number, number]>;
+        orderbook?: {
+          yes?: Array<[number, number]>;
+          no?: Array<[number, number]>;
         };
       }>(`/markets/${ticker}/orderbook`);
 
+      const ob = response.data?.orderbook;
+      if (!ob) {
+        // Market exists but has no order book yet — return empty book
+        return { marketId: ticker, bids: [], asks: [], timestamp: new Date() };
+      }
+
       return {
         marketId: ticker,
-        bids: response.data.orderbook.yes.map(([price, size]) => ({
-          price: price / 100,
-          size,
-        })),
-        asks: response.data.orderbook.no.map(([price, size]) => ({
-          price: 1 - price / 100,
-          size,
-        })),
+        bids: (ob.yes ?? []).map(([price, size]) => ({ price: price / 100, size })),
+        asks: (ob.no ?? []).map(([price, size]) => ({ price: 1 - price / 100, size })),
         timestamp: new Date(),
       };
-    } catch (err) {
-      logger.warn('KalshiClient.fetchOrderBook failed', { ticker, err });
+    } catch (err: any) {
+      logger.warn(`KalshiClient.fetchOrderBook failed: ${err?.message ?? String(err)} (status: ${err?.response?.status ?? 'n/a'})`, { ticker });
       return null;
     }
   }

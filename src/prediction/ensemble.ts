@@ -70,20 +70,31 @@ export class EnsembleForecaster {
     const userPrompt = buildUserPrompt(ctx);
     const systemPrompt = SYSTEM_PROMPTS[config.role];
 
+    // Models that natively support json_object response_format via OpenRouter
+    const JSON_MODE_MODELS = new Set([
+      'openai/gpt-4o',
+      'openai/gpt-4o-mini',
+      'openai/gpt-4-turbo',
+    ]);
+
     try {
       const response = await this.client.chat.completions.create({
         model: config.modelId,
         max_tokens: 256,
+        stream: false,
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt },
         ],
-        response_format: { type: 'json_object' },
+        ...(JSON_MODE_MODELS.has(config.modelId) ? { response_format: { type: 'json_object' as const } } : {}),
       });
 
-      const rawText = response.choices[0]?.message?.content ?? '{}';
+      const rawText = response.choices[0]?.message?.content ?? '';
+      // Extract JSON block even if the model wraps it in markdown fences
+      const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+      const jsonText = jsonMatch ? jsonMatch[0] : '{}';
 
-      const parsed = JSON.parse(rawText) as {
+      const parsed = JSON.parse(jsonText) as {
         probability?: number;
         confidence?: number;
         reasoning?: string;
@@ -102,7 +113,8 @@ export class EnsembleForecaster {
         latencyMs: Date.now() - start,
       };
     } catch (err) {
-      logger.warn(`EnsembleForecaster: ${config.name} (${config.modelId}) failed`, { err });
+      const errMsg = err instanceof Error ? err.message : String(err);
+      logger.warn(`EnsembleForecaster: ${config.name} (${config.modelId}) failed: ${errMsg}`);
       return {
         model: config.name,
         probability: ctx.marketPrice,

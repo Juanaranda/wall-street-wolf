@@ -77,6 +77,31 @@ app.get('/api/metrics', (_req, res) => {
   });
 });
 
+// ── Capital history ───────────────────────────────────────────────────────────
+app.get('/api/capital-history', (_req, res) => {
+  const initialBankroll = parseFloat(process.env['INITIAL_BANKROLL'] ?? '10000');
+
+  if (!fs.existsSync(TRADES_FILE)) {
+    return res.json([{ t: new Date().toISOString(), capital: initialBankroll }]);
+  }
+
+  const lines = fs.readFileSync(TRADES_FILE, 'utf-8').trim().split('\n').filter(Boolean);
+  const closed = lines
+    .map((l) => { try { return JSON.parse(l); } catch { return null; } })
+    .filter((t: any) => t && t.closedAt && t.pnl !== undefined)
+    .sort((a: any, b: any) => new Date(a.closedAt).getTime() - new Date(b.closedAt).getTime());
+
+  let running = initialBankroll;
+  const points = [{ t: closed.length > 0 ? closed[0].openedAt : new Date().toISOString(), capital: initialBankroll }];
+
+  for (const trade of closed) {
+    running += trade.pnl;
+    points.push({ t: trade.closedAt, capital: parseFloat(running.toFixed(2)) });
+  }
+
+  res.json(points);
+});
+
 // ── Dashboard HTML ────────────────────────────────────────────────────────────
 app.get('/', (_req, res) => {
   res.send(`<!DOCTYPE html>
@@ -85,6 +110,7 @@ app.get('/', (_req, res) => {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Wall Street Wolf — Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     :root {
@@ -97,7 +123,7 @@ app.get('/', (_req, res) => {
     header h1 { font-size: 20px; font-weight: 700; letter-spacing: -0.5px; }
     .badge { padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; background: #064e3b; color: var(--green); }
     .badge.offline { background: #450a0a; color: var(--red); }
-    main { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: auto 1fr; gap: 16px; padding: 20px 24px; height: calc(100vh - 65px); }
+    main { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: auto auto 1fr; gap: 16px; padding: 20px 24px; min-height: calc(100vh - 65px); }
     .metrics { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; }
     .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
     .card .label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
@@ -106,6 +132,9 @@ app.get('/', (_req, res) => {
     .card .value.red { color: var(--red); }
     .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; display: flex; flex-direction: column; }
     .panel-header { padding: 12px 16px; border-bottom: 1px solid var(--border); font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); display: flex; justify-content: space-between; align-items: center; }
+    /* Chart */
+    .chart-panel { grid-column: 1 / -1; }
+    .chart-wrap { padding: 16px; height: 220px; position: relative; }
     /* Logs */
     #log-container { flex: 1; overflow-y: auto; padding: 12px; font-family: 'Menlo', 'Monaco', monospace; font-size: 12px; line-height: 1.6; }
     .log-line { padding: 2px 0; border-bottom: 1px solid #1a2030; }
@@ -139,6 +168,10 @@ app.get('/', (_req, res) => {
       <div class="card"><div class="label">Win Rate</div><div class="value" id="m-winrate">—</div></div>
       <div class="card"><div class="label">Wins / Losses</div><div class="value" id="m-wl">—</div></div>
       <div class="card"><div class="label">P&L Total</div><div class="value" id="m-pnl">—</div></div>
+    </div>
+    <div class="panel chart-panel">
+      <div class="panel-header"><span>Capital en el tiempo</span><span id="chart-points">— puntos</span></div>
+      <div class="chart-wrap"><canvas id="capital-chart"></canvas></div>
     </div>
     <div class="panel">
       <div class="panel-header"><span>Logs en tiempo real</span><span id="log-count">0 líneas</span></div>
@@ -205,17 +238,76 @@ app.get('/', (_req, res) => {
         div.className = 'log-line ' + (entry.level ?? 'info');
         const ts = (entry.timestamp ?? '').replace('T', ' ').substring(0, 19);
         div.innerHTML = '<span class="ts">' + ts + '</span><span class="lvl">[' + (entry.level ?? '').toUpperCase() + ']</span> <span class="msg">' + (entry.message ?? '') + '</span>';
-        logContainer.appendChild(div);
-        logContainer.scrollTop = logContainer.scrollHeight;
+        logContainer.prepend(div);
         logCount++;
         document.getElementById('log-count').textContent = logCount + ' líneas';
       } catch(e) {}
     };
 
+    // ── Capital chart ────────────────────────────────────────────────────────
+    const ctx = document.getElementById('capital-chart').getContext('2d');
+    const capitalChart = new Chart(ctx, {
+      type: 'line',
+      data: { labels: [], datasets: [{
+        label: 'Capital ($)',
+        data: [],
+        borderColor: '#10b981',
+        backgroundColor: 'rgba(16,185,129,0.08)',
+        borderWidth: 2,
+        pointRadius: 3,
+        pointHoverRadius: 5,
+        pointBackgroundColor: '#10b981',
+        fill: true,
+        tension: 0.3,
+      }]},
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: (ctx) => ' $' + ctx.parsed.y.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+            }
+          }
+        },
+        scales: {
+          x: { ticks: { color: '#6b7280', maxTicksLimit: 8, maxRotation: 0 }, grid: { color: '#1f2937' } },
+          y: {
+            ticks: { color: '#6b7280', callback: (v) => '$' + Number(v).toLocaleString() },
+            grid: { color: '#1f2937' },
+          }
+        }
+      }
+    });
+
+    async function loadCapitalChart() {
+      try {
+        const r = await fetch('/api/capital-history');
+        const points = await r.json();
+        capitalChart.data.labels = points.map(p => {
+          const d = new Date(p.t);
+          return d.toLocaleDateString('es-ES', { month: 'short', day: 'numeric' }) + ' ' + d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+        });
+        capitalChart.data.datasets[0].data = points.map(p => p.capital);
+        // Color de la línea según ganancia o pérdida
+        const first = points[0]?.capital ?? 0;
+        const last = points[points.length - 1]?.capital ?? 0;
+        const color = last >= first ? '#10b981' : '#ef4444';
+        capitalChart.data.datasets[0].borderColor = color;
+        capitalChart.data.datasets[0].pointBackgroundColor = color;
+        capitalChart.data.datasets[0].backgroundColor = last >= first ? 'rgba(16,185,129,0.08)' : 'rgba(239,68,68,0.08)';
+        capitalChart.update('none');
+        document.getElementById('chart-points').textContent = (points.length - 1) + ' trades';
+      } catch(e) {}
+    }
+
     // ── Polling ──────────────────────────────────────────────────────────────
     loadMetrics();
     loadTrades();
-    setInterval(() => { loadMetrics(); loadTrades(); }, 10000);
+    loadCapitalChart();
+    setInterval(() => { loadMetrics(); loadTrades(); loadCapitalChart(); }, 10000);
   </script>
 </body>
 </html>`);
