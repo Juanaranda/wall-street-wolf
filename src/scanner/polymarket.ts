@@ -68,7 +68,7 @@ export class PolymarketClient {
         timestamp: new Date(),
       };
     } catch (err: any) {
-      logger.warn(`PolymarketClient.fetchOrderBook failed: ${err?.message ?? String(err)} (status: ${err?.response?.status ?? 'n/a'})`, { conditionId });
+      logger.debug(`PolymarketClient.fetchOrderBook failed: ${err?.message ?? String(err)} (status: ${err?.response?.status ?? 'n/a'})`, { conditionId });
       return null;
     }
   }
@@ -100,8 +100,11 @@ export class PolymarketClient {
   private normalize(raw: PolymarketApiMarket): Market {
     const yesToken = raw.tokens.find((t) => t.outcome.toLowerCase() === 'yes');
     const noToken = raw.tokens.find((t) => t.outcome.toLowerCase() === 'no');
+    // Use YES token_id as market.id — required by /book endpoint
+    // Store condition_id in description prefix for reference
+    const marketId = yesToken?.token_id ?? raw.condition_id;
     return {
-      id: raw.condition_id,
+      id: marketId,
       platform: 'polymarket',
       question: raw.question,
       description: raw.description ?? '',

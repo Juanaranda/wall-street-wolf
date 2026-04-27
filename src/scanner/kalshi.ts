@@ -1,5 +1,5 @@
 import axios, { AxiosInstance, InternalAxiosRequestConfig } from 'axios';
-import { createSign } from 'crypto';
+import { createPrivateKey, sign as cryptoSign, constants as cryptoConstants } from 'crypto';
 import { Market } from '../shared/types';
 import { logger } from '../shared/logger';
 import { KalshiApiMarket, OrderBook } from './types';
@@ -26,19 +26,20 @@ export class KalshiClient {
 
       const timestampMs = Date.now().toString();
       const method = (config.method ?? 'GET').toUpperCase();
-      // Build path + query string
-      const url = new URL(config.url ?? '', this.baseUrl);
-      const pathAndQuery = url.pathname + (url.search ?? '');
-      const body = config.data
-        ? (typeof config.data === 'string' ? config.data : JSON.stringify(config.data))
-        : '';
+      // Build full path: baseUrl contributes its pathname prefix (e.g. /trade-api/v2)
+      // new URL(relPath, base) with an absolute relPath ignores base's pathname, so we build manually
+      const basePath = new URL(this.baseUrl).pathname.replace(/\/$/, '');
+      const reqParsed = new URL(config.url ?? '', 'http://localhost');
+      const pathAndQuery = basePath + reqParsed.pathname + reqParsed.search;
+      // Kalshi signs: timestamp + method + path (body NOT included)
+      const msgToSign = timestampMs + method + pathAndQuery;
 
-      const msgToSign = timestampMs + method + pathAndQuery + body;
-
-      const signer = createSign('RSA-SHA256');
-      signer.update(msgToSign);
-      signer.end();
-      const signature = signer.sign(this.privateKey, 'base64');
+      const keyObj = createPrivateKey(this.privateKey);
+      const signature = cryptoSign(
+        'sha256',
+        Buffer.from(msgToSign),
+        { key: keyObj, padding: cryptoConstants.RSA_PKCS1_PSS_PADDING, saltLength: cryptoConstants.RSA_PSS_SALTLEN_DIGEST }
+      ).toString('base64');
 
       config.headers['KALSHI-Access-Key'] = this.apiKeyId;
       config.headers['KALSHI-Access-Signature'] = signature;

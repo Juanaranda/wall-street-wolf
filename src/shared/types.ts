@@ -1,7 +1,7 @@
 // Core shared types for the prediction market trading bot
 
-export type Platform = 'polymarket' | 'kalshi';
-export type Direction = 'yes' | 'no';
+export type Platform = 'polymarket' | 'kalshi' | 'binance' | 'alpaca';
+export type Direction = 'yes' | 'no' | 'long' | 'short';
 export type TradeStatus = 'filled' | 'partial' | 'rejected' | 'cancelled' | 'pending';
 export type SentimentLabel = 'bullish' | 'bearish' | 'neutral';
 export type FailureCategory =
@@ -215,6 +215,17 @@ export interface BotConfig {
     kellyFraction: number;
     scanIntervalMs: number;
     maxDailyApiCostUsd: number;
+  };
+  binance: {
+    apiUrl: string;
+    apiKey: string;
+    apiSecret: string;
+    testnet: boolean;
+  };
+  alpaca: {
+    apiKey: string;
+    apiSecret: string;
+    paperTrading: boolean;
   };
   ai: {
     openRouterApiKey: string;

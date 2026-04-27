@@ -1,5 +1,5 @@
 import axios, { AxiosInstance, InternalAxiosRequestConfig } from 'axios';
-import { createSign } from 'crypto';
+import { createPrivateKey, sign as cryptoSign, constants as cryptoConstants } from 'crypto';
 import { v4 as uuidv4 } from 'uuid';
 import { logger } from '../shared/logger';
 import { OrderRequest, RawOrderResponse, KalshiOrderPayload, ExecutionResult } from './types';
@@ -25,16 +25,18 @@ export class KalshiExecutor {
 
       const timestampMs = Date.now().toString();
       const method = (config.method ?? 'GET').toUpperCase();
-      const url = new URL(config.url ?? '', baseUrl);
-      const pathAndQuery = url.pathname + (url.search ?? '');
-      const body = config.data
-        ? (typeof config.data === 'string' ? config.data : JSON.stringify(config.data))
-        : '';
-
-      const signer = createSign('RSA-SHA256');
-      signer.update(timestampMs + method + pathAndQuery + body);
-      signer.end();
-      const signature = signer.sign(this.privateKey, 'base64');
+      // Build full path: baseUrl contributes its pathname prefix (e.g. /trade-api/v2)
+      // new URL(relPath, base) with an absolute relPath ignores base's pathname, so we build manually
+      const basePath = new URL(baseUrl).pathname.replace(/\/$/, '');
+      const reqParsed = new URL(config.url ?? '', 'http://localhost');
+      const pathAndQuery = basePath + reqParsed.pathname + reqParsed.search;
+      // Kalshi signs: timestamp + method + path (body NOT included)
+      const keyObj = createPrivateKey(this.privateKey);
+      const signature = cryptoSign(
+        'sha256',
+        Buffer.from(timestampMs + method + pathAndQuery),
+        { key: keyObj, padding: cryptoConstants.RSA_PKCS1_PSS_PADDING, saltLength: cryptoConstants.RSA_PSS_SALTLEN_DIGEST }
+      ).toString('base64');
 
       config.headers['KALSHI-Access-Key'] = this.apiKeyId;
       config.headers['KALSHI-Access-Signature'] = signature;
@@ -82,14 +84,18 @@ export class KalshiExecutor {
     // Minimum 1 contract, rounded down to avoid over-sizing
     const contractCount = Math.max(1, Math.floor(req.sizeUsd));
 
+    // Kalshi only supports 'yes' | 'no' sides; 'long'/'short' are not valid here
+    const kalshiSide: 'yes' | 'no' =
+      req.direction === 'yes' || req.direction === 'no' ? req.direction : 'yes';
+
     const payload: KalshiOrderPayload = {
       ticker: req.marketId,
       client_order_id: uuidv4(),
       action: 'buy',
-      side: req.direction,
+      side: kalshiSide,
       type: 'limit',
       count: contractCount,
-      [req.direction === 'yes' ? 'yes_price' : 'no_price']: priceInCents,
+      [kalshiSide === 'yes' ? 'yes_price' : 'no_price']: priceInCents,
     };
 
     try {
@@ -101,7 +107,7 @@ export class KalshiExecutor {
           avg_price: number;
           fees_paid: number;
         };
-      }>('/portfolio/orders', { order: payload });
+      }>('/portfolio/orders', payload);
 
       const order = response.data.order;
       const filledPrice = (order.avg_price ?? priceInCents) / 100;
@@ -122,9 +128,11 @@ export class KalshiExecutor {
         slippage,
         fees: (order.fees_paid ?? 0) / 100,
       };
-    } catch (err) {
-      logger.error('KalshiExecutor.placeOrder failed', { marketId: req.marketId, err });
-      return { success: false, error: String(err) };
+    } catch (err: any) {
+      const apiError = err?.response?.data?.error;
+      const msg = apiError ? `${apiError.code}: ${apiError.message}` : String(err);
+      logger.error('KalshiExecutor.placeOrder failed', { marketId: req.marketId, status: err?.response?.status, error: msg });
+      return { success: false, error: msg };
     }
   }
 

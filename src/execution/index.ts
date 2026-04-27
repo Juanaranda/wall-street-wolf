@@ -3,18 +3,21 @@ import { logger } from '../shared/logger';
 import {
   PredictionResult,
   RiskAssessment,
-  TradeOrder,
   TradeResult,
   Platform,
 } from '../shared/types';
 import { generateTradeId } from '../shared/utils';
 import { PolymarketExecutor } from './polymarket-executor';
 import { KalshiExecutor } from './kalshi-executor';
+import { BinanceExecutor } from './binance-executor';
+import { AlpacaExecutor } from './alpaca-executor';
 import { OrderRequest, ExecutionResult } from './types';
 
 export class ExecutionEngine {
   private readonly polyExecutor: PolymarketExecutor;
   private readonly kalshiExecutor: KalshiExecutor;
+  private readonly binanceExecutor: BinanceExecutor | null;
+  private readonly alpacaExecutor: AlpacaExecutor | null;
 
   constructor(
     polyPrivateKey: string,
@@ -24,14 +27,35 @@ export class ExecutionEngine {
     kalshiApiKeyId: string,
     kalshiPrivateKey: string,
     polyBaseUrl?: string,
-    kalshiBaseUrl?: string
+    kalshiBaseUrl?: string,
+    binanceApiKey?: string,
+    binanceApiSecret?: string,
+    binanceBaseUrl?: string,
+    binanceTestnet?: boolean,
+    alpacaApiKey?: string,
+    alpacaApiSecret?: string,
+    alpacaPaper?: boolean
   ) {
-    this.polyExecutor = new PolymarketExecutor(polyPrivateKey, polyApiKey, polySecret, polyPassphrase, polyBaseUrl);
+    this.polyExecutor = new PolymarketExecutor(
+      polyPrivateKey, polyApiKey, polySecret, polyPassphrase, polyBaseUrl
+    );
     this.kalshiExecutor = new KalshiExecutor(kalshiApiKeyId, kalshiPrivateKey, kalshiBaseUrl);
+
+    this.binanceExecutor =
+      binanceApiKey && binanceApiSecret && binanceBaseUrl
+        ? new BinanceExecutor(binanceApiKey, binanceApiSecret, binanceBaseUrl, binanceTestnet ?? true)
+        : null;
+
+    this.alpacaExecutor =
+      alpacaApiKey && alpacaApiSecret
+        ? new AlpacaExecutor(alpacaApiKey, alpacaApiSecret, alpacaPaper ?? true)
+        : null;
   }
 
   async initialize(): Promise<void> {
     await this.kalshiExecutor.authenticate();
+    if (this.binanceExecutor) await this.binanceExecutor.authenticate();
+    if (this.alpacaExecutor) await this.alpacaExecutor.authenticate();
   }
 
   /**
@@ -49,6 +73,34 @@ export class ExecutionEngine {
       return null;
     }
 
+    // Dry-run mode: log what would be traded but don't place orders
+    if (process.env['DRY_RUN'] === 'true') {
+      const limitPrice =
+        prediction.direction === 'yes' || prediction.direction === 'long'
+          ? prediction.marketProbability
+          : 1 - prediction.marketProbability;
+      logger.info('ExecutionEngine: DRY RUN — would place order', {
+        marketId: prediction.marketId,
+        platform,
+        direction: prediction.direction,
+        size: risk.positionSize,
+        price: limitPrice,
+        edge: prediction.modelProbability - prediction.marketProbability,
+      });
+      return {
+        orderId: `dry-${Date.now()}`,
+        marketId: prediction.marketId,
+        platform,
+        direction: prediction.direction as 'yes' | 'no',
+        filledSize: risk.positionSize,
+        filledPrice: limitPrice,
+        slippage: 0,
+        fees: 0,
+        status: 'filled',
+        timestamp: new Date(),
+      };
+    }
+
     if (!risk.approved) {
       logger.warn('ExecutionEngine: risk assessment not approved', {
         marketId: prediction.marketId,
@@ -63,7 +115,7 @@ export class ExecutionEngine {
     }
 
     const limitPrice =
-      prediction.direction === 'yes'
+      prediction.direction === 'yes' || prediction.direction === 'long'
         ? prediction.marketProbability
         : 1 - prediction.marketProbability;
 
@@ -85,9 +137,27 @@ export class ExecutionEngine {
       price: req.limitPrice,
     });
 
-    const result = platform === 'polymarket'
-      ? await this.polyExecutor.placeOrder(req)
-      : await this.kalshiExecutor.placeOrder(req);
+    let result: ExecutionResult;
+    if (platform === 'polymarket') {
+      result = await this.polyExecutor.placeOrder(req);
+    } else if (platform === 'kalshi') {
+      result = await this.kalshiExecutor.placeOrder(req);
+    } else if (platform === 'binance') {
+      if (!this.binanceExecutor) {
+        logger.error('ExecutionEngine: Binance executor not configured');
+        return null;
+      }
+      result = await this.binanceExecutor.placeOrder(req);
+    } else if (platform === 'alpaca') {
+      if (!this.alpacaExecutor) {
+        logger.error('ExecutionEngine: Alpaca executor not configured');
+        return null;
+      }
+      result = await this.alpacaExecutor.placeOrder(req);
+    } else {
+      logger.error('ExecutionEngine: unknown platform', { platform });
+      return null;
+    }
 
     if (!result.success) {
       logger.error('ExecutionEngine: order failed', {
@@ -117,7 +187,16 @@ export class ExecutionEngine {
 
   async cancelOrder(platform: Platform, orderId: string): Promise<boolean> {
     if (platform === 'polymarket') return this.polyExecutor.cancelOrder(orderId);
-    return this.kalshiExecutor.cancelOrder(orderId);
+    if (platform === 'kalshi') return this.kalshiExecutor.cancelOrder(orderId);
+    if (platform === 'binance') {
+      if (!this.binanceExecutor) return false;
+      return this.binanceExecutor.cancelOrder(orderId);
+    }
+    if (platform === 'alpaca') {
+      if (!this.alpacaExecutor) return false;
+      return this.alpacaExecutor.cancelOrder(orderId);
+    }
+    return false;
   }
 }
 

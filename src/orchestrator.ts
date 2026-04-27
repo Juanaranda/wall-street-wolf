@@ -45,7 +45,11 @@ export class TradingOrchestrator {
       config.kalshi.privateKey,
       {
         maxDaysToExpiry: 90,
-      }
+      },
+      config.binance.apiUrl || undefined,
+      config.alpaca.apiKey || undefined,
+      config.alpaca.apiSecret || undefined,
+      config.alpaca.paperTrading
     );
 
     this.researcher = new ResearchAgent(
@@ -77,7 +81,16 @@ export class TradingOrchestrator {
       config.polymarket.secret,
       config.polymarket.passphrase,
       config.kalshi.apiKeyId,
-      config.kalshi.privateKey
+      config.kalshi.privateKey,
+      config.polymarket.apiUrl,
+      config.kalshi.apiUrl,
+      config.binance.apiKey || undefined,
+      config.binance.apiSecret || undefined,
+      config.binance.apiUrl || undefined,
+      config.binance.testnet,
+      config.alpaca.apiKey || undefined,
+      config.alpaca.apiSecret || undefined,
+      config.alpaca.paperTrading
     );
 
     this.compound = new CompoundService(config.logging.tradeLogPath);
