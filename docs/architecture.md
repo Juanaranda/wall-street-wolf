@@ -1,5 +1,10 @@
 # Wall Street Wolf — Architecture
 
+> ⚠️ **DEPRECATED (2026-05-30).** This describes the original prediction-market bot
+> (Polymarket/Kalshi/Binance/Alpaca auto-execution), now archived under `legacy/`.
+> The project pivoted to a **semi-automated equity signal system** (US market via
+> Fintual, manual execution). The authoritative design is **[`docs/spdd-canvas.md`](./spdd-canvas.md)**.
+
 ## Overview
 
 An AI-powered prediction market trading bot that scans Polymarket and Kalshi, uses a multi-model AI ensemble to find mispricings, and trades with strict risk management.

@@ -1,10 +1,10 @@
-import { TradingOrchestrator } from './orchestrator';
+import { SignalOrchestrator } from './orchestrator';
 import { logger } from './shared/logger';
 
 async function main(): Promise<void> {
-  logger.info('Wall Street Wolf: prediction market trading bot starting...');
+  logger.info('Wall Street Wolf: semi-automated equity signal system starting (paper)...');
 
-  const orchestrator = new TradingOrchestrator();
+  const orchestrator = new SignalOrchestrator();
 
   // Graceful shutdown handlers
   process.on('SIGINT', () => {

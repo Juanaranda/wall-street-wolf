@@ -188,6 +188,74 @@ export interface PerformanceMetrics {
   avgEdge: number;
 }
 
+// ══════════════════════════════════════════════════════════════════════════════
+// SIGNALS DOMAIN — semi-automated equity signal system (Fintual / US market)
+// Shared entity types. Each module (universe/data/signals/notify/ledger) defines
+// its own provider interface + implementation in its own directory.
+// ══════════════════════════════════════════════════════════════════════════════
+
+export type AssetClass = 'stock' | 'etf' | 'adr';
+export type SignalAction = 'buy' | 'sell' | 'hold';
+export type TradeAction = 'buy' | 'sell';
+
+/** A tradeable instrument in the user's Fintual-compatible universe (US market). */
+export interface Instrument {
+  ticker: string;
+  name: string;
+  assetClass: AssetClass;
+  /** Free-form tags, e.g. 'chile', 'tech', 'blue-chip'. */
+  tags: string[];
+}
+
+/** A single OHLCV price bar. */
+export interface PriceBar {
+  ticker: string;
+  timestamp: Date;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+}
+
+/** Output of the signal engine for one instrument. */
+export interface Signal {
+  ticker: string;
+  action: SignalAction;
+  strength: number; // 0–1
+  confidence: number; // 0–1
+  reasons: string[]; // which indicators/checks fired
+  timestamp: Date;
+}
+
+/** An actionable recommendation sent to the user (they execute manually in Fintual). */
+export interface Recommendation {
+  id: string;
+  ticker: string;
+  action: TradeAction;
+  suggestedAmountUsd: number;
+  confidence: number; // 0–1
+  rationale: string;
+  createdAt: Date;
+}
+
+/** A paper-trading position opened off a recommendation. */
+export interface PaperPosition {
+  ticker: string;
+  entryPrice: number;
+  shares: number;
+  openedAt: Date;
+}
+
+/** The user's manually-executed fill in Fintual, reported back for reconciliation. */
+export interface ManualFill {
+  recommendationId: string;
+  ticker: string;
+  filledPrice: number;
+  shares: number;
+  filledAt: Date;
+}
+
 // ── Config ────────────────────────────────────────────────────────────────────
 
 export interface BotConfig {
