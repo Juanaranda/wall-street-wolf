@@ -10,7 +10,8 @@
     "test": "jest",
     "lint": "eslint src --ext .ts",
     "typecheck": "tsc --noEmit",
-    "dashboard": "ts-node src/dashboard/server.ts"
+    "dashboard": "ts-node src/dashboard/server.ts",
+    "backtest": "ts-node scripts/backtest.ts"
   },
   "dependencies": {
     "@alpacahq/alpaca-trade-api": "^3.1.3",
