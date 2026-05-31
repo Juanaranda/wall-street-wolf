@@ -15,6 +15,7 @@ function trade(returnPct: number, confidence: number): BacktestTrade {
     returnPct,
     win: returnPct > 0,
     reasons: [],
+    exitReason: 'sell-signal',
   };
 }
 
