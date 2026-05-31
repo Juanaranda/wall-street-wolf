@@ -75,6 +75,31 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/** Approximate milliseconds covered by one bar of the given timeframe. */
+function timeframeToMs(timeframe: string): number {
+  const match = timeframe.match(/^(\d+)\s*(Min|Hour|Day|Week|Month)$/i);
+  const n = match ? parseInt(match[1]!, 10) : 1;
+  const unit = (match ? match[2]! : 'Day').toLowerCase();
+  const base: Record<string, number> = {
+    min: 60_000,
+    hour: 3_600_000,
+    day: 86_400_000,
+    week: 604_800_000,
+    month: 2_592_000_000,
+  };
+  return n * (base[unit] ?? base['day']!);
+}
+
+/**
+ * Calendar lookback window needed to cover `limit` bars, with a safety factor
+ * for non-trading time (weekends/holidays for daily; closed hours for intraday).
+ */
+function lookbackMs(timeframe: string, limit: number): number {
+  const perBar = timeframeToMs(timeframe);
+  const factor = /(day|week|month)/i.test(timeframe) ? 2.0 : 4.0;
+  return Math.ceil(perBar * limit * factor);
+}
+
 function mapBar(ticker: string, bar: AlpacaBar): PriceBar {
   return {
     ticker,
@@ -158,16 +183,24 @@ export class AlpacaDataProvider implements MarketDataProvider {
 
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       try {
+        // Alpaca returns no bars without a `start`. Request the newest `limit`
+        // bars (sort=desc within a generous window), use the free IEX feed, and
+        // adjust for splits/dividends for backtest accuracy.
+        const start = new Date(Date.now() - lookbackMs(timeframe, limit)).toISOString();
         const response = await this.client.get<AlpacaBarsResponse>(url, {
           params: {
             timeframe,
+            start,
             limit,
-            sort: 'asc',
+            sort: 'desc',
+            feed: 'iex',
+            adjustment: 'all',
           },
         });
 
         const rawBars: AlpacaBar[] = response.data?.bars ?? [];
-        return rawBars.map((b) => mapBar(symbol, b));
+        // Reverse desc→asc so callers always get oldest → newest.
+        return rawBars.map((b) => mapBar(symbol, b)).reverse();
       } catch (err: unknown) {
         const isLastAttempt = attempt === MAX_RETRIES;
         if (isLastAttempt) {

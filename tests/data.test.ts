@@ -40,11 +40,12 @@ function makeAxiosError(status: number, data: unknown = {}): Record<string, unkn
   };
 }
 
+// Alpaca returns newest → oldest (sort=desc); the provider reverses to asc.
 const FAKE_BARS_RESPONSE = {
   data: {
     bars: [
-      { t: '2024-01-02T05:00:00Z', o: 185.5, h: 188.0, l: 184.3, c: 187.2, v: 52_000_000 },
       { t: '2024-01-03T05:00:00Z', o: 187.2, h: 190.1, l: 186.0, c: 189.5, v: 48_000_000 },
+      { t: '2024-01-02T05:00:00Z', o: 185.5, h: 188.0, l: 184.3, c: 187.2, v: 52_000_000 },
     ],
   },
 };
@@ -107,7 +108,14 @@ describe('AlpacaDataProvider.getBars', () => {
     await provider.getBars('MSFT', '1Hour', 50);
 
     expect(mockGet).toHaveBeenCalledWith('/v2/stocks/MSFT/bars', {
-      params: { timeframe: '1Hour', limit: 50, sort: 'asc' },
+      params: expect.objectContaining({
+        timeframe: '1Hour',
+        limit: 50,
+        sort: 'desc',
+        feed: 'iex',
+        adjustment: 'all',
+        start: expect.any(String),
+      }),
     });
   });
 
