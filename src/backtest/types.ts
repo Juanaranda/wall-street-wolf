@@ -1,10 +1,15 @@
-/** Configuration for a walk-forward backtest run. */
+/**
+ * Configuration for a walk-forward backtest run.
+ *
+ * LONG-ONLY model (matches Fintual reality): a 'buy' opens a long position when
+ * flat; a 'sell' exits an open long; 'hold' does nothing. The bot never shorts.
+ */
 export interface BacktestConfig {
   /** Minimum bars required before the first signal is evaluated (indicator warmup). */
   warmupBars: number;
-  /** Number of bars to hold a position after entry before exiting. */
-  holdingPeriodBars: number;
-  /** Only act on signals whose confidence is ≥ this threshold. */
+  /** Max bars to hold before a forced exit. 0 = hold until a 'sell' signal. */
+  maxHoldBars: number;
+  /** Only ENTER on 'buy' signals whose confidence is ≥ this threshold. */
   minConfidence: number;
   /** Round-trip cost as a fraction (e.g. 0.001 = 0.1%, Fintual beyond 10 free orders/mo). */
   feePct: number;
@@ -12,31 +17,31 @@ export interface BacktestConfig {
 
 export const DEFAULT_BACKTEST_CONFIG: BacktestConfig = {
   warmupBars: 60,
-  holdingPeriodBars: 5,
+  maxHoldBars: 0,
   minConfidence: 0.6,
   feePct: 0,
 };
 
-/** A single simulated trade produced by the backtester. */
+/** A single simulated LONG trade produced by the backtester. */
 export interface BacktestTrade {
   ticker: string;
-  action: 'buy' | 'sell';
+  /** Always 'buy' — long-only model. Entry on a buy signal, exit on sell/timeout. */
+  action: 'buy';
   entryIndex: number;
   entryTime: Date;
   entryPrice: number;
   exitIndex: number;
   exitTime: Date;
   exitPrice: number;
+  /** Confidence of the entry signal. */
   confidence: number;
-  /**
-   * Net return as a fraction, sign-adjusted for the signal direction:
-   * a 'buy' profits when price rises, a 'sell' profits when price falls.
-   * This measures the *predictive quality* of the signal. (Fintual is long-only;
-   * a 'sell' in practice means exit/avoid — see report for the long-only view.)
-   */
+  /** Net long return as a fraction: (exit − entry) / entry − fees. */
   returnPct: number;
   win: boolean;
+  /** Reasons from the entry signal. */
   reasons: string[];
+  /** How the position was closed. */
+  exitReason: 'sell-signal' | 'timeout' | 'end-of-data';
 }
 
 /** Result of backtesting one instrument. */
