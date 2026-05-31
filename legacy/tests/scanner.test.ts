@@ -29,8 +29,14 @@ describe('MarketScanner', () => {
   let scanner: MarketScanner;
   let mockPoly: jest.Mocked<PolymarketClient>;
   let mockKalshi: jest.Mocked<KalshiClient>;
+  let savedPolyKey: string | undefined;
 
   beforeEach(() => {
+    // Scanner skips Polymarket unless a real (non-sentinel) key is present.
+    // Provide one so the "fetch from both platforms" expectation holds.
+    savedPolyKey = process.env['POLYMARKET_PRIVATE_KEY'];
+    process.env['POLYMARKET_PRIVATE_KEY'] = '0xtest-poly-key';
+
     (PolymarketClient as jest.MockedClass<typeof PolymarketClient>).mockClear();
     (KalshiClient as jest.MockedClass<typeof KalshiClient>).mockClear();
 
@@ -46,6 +52,11 @@ describe('MarketScanner', () => {
       .mock.instances[0] as jest.Mocked<PolymarketClient>;
     mockKalshi = (KalshiClient as jest.MockedClass<typeof KalshiClient>)
       .mock.instances[0] as jest.Mocked<KalshiClient>;
+  });
+
+  afterEach(() => {
+    if (savedPolyKey === undefined) delete process.env['POLYMARKET_PRIVATE_KEY'];
+    else process.env['POLYMARKET_PRIVATE_KEY'] = savedPolyKey;
   });
 
   describe('scan()', () => {
