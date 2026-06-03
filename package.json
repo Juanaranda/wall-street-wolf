@@ -14,7 +14,8 @@
     "backtest": "ts-node scripts/backtest.ts",
     "compare": "ts-node scripts/compare-strategies.ts",
     "validate": "ts-node scripts/validate-oos.ts",
-    "ingest": "ts-node scripts/ingest.ts"
+    "ingest": "ts-node scripts/ingest.ts",
+    "etl": "ts-node scripts/etl.ts"
   },
   "dependencies": {
     "@alpacahq/alpaca-trade-api": "^3.1.3",
