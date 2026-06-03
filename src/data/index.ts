@@ -303,3 +303,29 @@ function extractErrorMessage(err: unknown): string {
   if (err instanceof Error) return err.message;
   return String(err);
 }
+
+// ---------------------------------------------------------------------------
+// Data warehouse — Stooq (deep free history) + Postgres cache
+// ---------------------------------------------------------------------------
+
+export type { BarStore } from './types';
+export { StooqDataProvider } from './stooq';
+export { YahooDataProvider } from './yahoo';
+export { PostgresBarStore } from './bar-store';
+export { CachedDataProvider } from './cached';
+import { YahooDataProvider } from './yahoo';
+import { PostgresBarStore } from './bar-store';
+import { CachedDataProvider } from './cached';
+
+/**
+ * Default data provider. Uses Yahoo Finance (free, ~20yr history, no API key)
+ * as the source, cached in a local Postgres warehouse when DATABASE_URL is set.
+ * (Stooq is also available but now gates its free CSV behind an API key.)
+ */
+export function createDataProvider(): MarketDataProvider {
+  const source = new YahooDataProvider();
+  if (process.env['DATABASE_URL']) {
+    return new CachedDataProvider(source, new PostgresBarStore(), 'yahoo');
+  }
+  return source;
+}

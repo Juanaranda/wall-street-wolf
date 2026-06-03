@@ -10,7 +10,7 @@
  */
 import 'dotenv/config';
 import { StaticUniverse } from '../src/universe';
-import { AlpacaDataProvider } from '../src/data';
+import { createDataProvider } from '../src/data';
 import { PriceBar } from '../src/shared/types';
 import { SignalEngine, TechnicalSignalEngine } from '../src/signals';
 import { TrendFollowingEngine } from '../src/signals/strategies/trend-following';
@@ -35,10 +35,7 @@ async function main(): Promise<void> {
   const universe = await new StaticUniverse().list();
   const tickers = argv.length > 0 ? argv : universe.map((i) => i.ticker);
 
-  const data = new AlpacaDataProvider(
-    process.env['ALPACA_API_KEY'] ?? '',
-    process.env['ALPACA_API_SECRET'] ?? ''
-  );
+  const data = createDataProvider();
 
   // Fetch each ticker's bars ONCE; reuse across all strategies.
   console.log(`Fetching ${tickers.length} ticker(s)...`);
