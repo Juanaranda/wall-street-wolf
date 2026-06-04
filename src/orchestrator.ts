@@ -40,7 +40,7 @@ export class SignalOrchestrator {
     logger.info('SignalOrchestrator: ready');
   }
 
-  /** Run one full pipeline cycle. Returns the recommendations sent. */
+  /** Run one full pipeline cycle. Returns the recommendations sent (buys + sells). */
   async runCycle(): Promise<Recommendation[]> {
     if (isKillSwitchActive()) {
       logger.warn('SignalOrchestrator: kill switch active — skipping cycle');
@@ -48,46 +48,76 @@ export class SignalOrchestrator {
     }
 
     const instruments = await this.universe.list();
-    logger.info(`SignalOrchestrator: evaluating ${instruments.length} instruments`);
+    const heldShares = new Map(this.ledger.openPositions().map((p) => [p.ticker, p.shares]));
+    logger.info(`SignalOrchestrator: evaluating ${instruments.length} instruments (${heldShares.size} held)`);
 
-    const signals: Signal[] = [];
+    const buyCandidates: Array<{ signal: Signal; inst: Instrument }> = [];
+    const sells: Recommendation[] = [];
+
     for (const inst of instruments) {
       try {
         // Momentum needs ~252 bars of history; fetch a little more.
         const bars = await this.data.getBars(inst.ticker, '1Day', 300);
         const signal = await this.signals.evaluate(inst.ticker, bars);
-        if (signal.action === 'buy') signals.push(signal); // long-only: act on buys
+        const lastPrice = bars.length ? bars[bars.length - 1]!.close : null;
+        const held = heldShares.get(inst.ticker);
+
+        if (held && held > 0 && signal.action === 'sell') {
+          // EXIT: momentum faded on something we hold → sell the whole position.
+          sells.push(this.toSellRecommendation(inst, signal, held, lastPrice));
+        } else if (!held && signal.action === 'buy' && signal.confidence >= MIN_CONFIDENCE) {
+          // ENTRY candidate (don't double-buy what we already hold).
+          buyCandidates.push({ signal, inst });
+        }
       } catch (err) {
         logger.warn(`SignalOrchestrator: failed to evaluate ${inst.ticker}`, { err });
       }
     }
 
-    const actionable = signals
-      .filter((s) => s.confidence >= MIN_CONFIDENCE)
-      .sort((a, b) => b.confidence - a.confidence)
-      .slice(0, MAX_SIGNALS_PER_CYCLE);
+    const buys = buyCandidates
+      .sort((a, b) => b.signal.confidence - a.signal.confidence)
+      .slice(0, MAX_SIGNALS_PER_CYCLE)
+      .map(({ signal, inst }) => this.toBuyRecommendation(signal, inst));
 
-    const recommendations: Recommendation[] = [];
-    for (const signal of actionable) {
-      const rec = this.toRecommendation(signal, instruments);
+    // Sells first — exits matter more than new entries.
+    const recommendations = [...sells, ...buys];
+    for (const rec of recommendations) {
       this.ledger.recordRecommendation(rec);
       await this.notifier.send(rec);
-      recommendations.push(rec);
     }
 
-    logger.info(`SignalOrchestrator: cycle complete — ${recommendations.length} recommendation(s) sent`);
+    logger.info(
+      `SignalOrchestrator: cycle complete — ${sells.length} sell(s), ${buys.length} buy(s)`
+    );
     return recommendations;
   }
 
-  private toRecommendation(signal: Signal, instruments: Instrument[]): Recommendation {
-    const inst = instruments.find((i) => i.ticker === signal.ticker);
+  private toBuyRecommendation(signal: Signal, inst: Instrument): Recommendation {
     return {
       id: randomUUID(),
       ticker: signal.ticker,
-      action: 'buy', // long-only
+      action: 'buy',
       suggestedAmountUsd: sizePosition(signal.confidence, this.sizing),
       confidence: signal.confidence,
-      rationale: `${inst?.name ?? signal.ticker}: ${signal.reasons.join(', ')}`,
+      rationale: `${inst.name}: ${signal.reasons.join(', ')}`,
+      createdAt: new Date(),
+    };
+  }
+
+  private toSellRecommendation(
+    inst: Instrument,
+    signal: Signal,
+    shares: number,
+    lastPrice: number | null
+  ): Recommendation {
+    const value = lastPrice ? Math.round(shares * lastPrice * 100) / 100 : 0;
+    return {
+      id: randomUUID(),
+      ticker: inst.ticker,
+      action: 'sell',
+      suggestedAmountUsd: value,
+      confidence: signal.confidence,
+      rationale: `${inst.name}: momentum se desvaneció (${signal.reasons.join(', ')}). Vender tus ${shares} acciones${value ? ` (~US$${value})` : ''}.`,
       createdAt: new Date(),
     };
   }
