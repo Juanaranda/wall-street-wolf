@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  macOS launchd agent: runs the daily signal once per weekday at 18:00 local.
+  Runs at the next wake if the Mac was asleep at 18:00, then exits (no 24/7 process).
+
+  Install:
+    cp config/launchd/com.wsw.signal.plist ~/Library/LaunchAgents/
+    launchctl load ~/Library/LaunchAgents/com.wsw.signal.plist
+
+  Disable / remove:
+    launchctl unload ~/Library/LaunchAgents/com.wsw.signal.plist
+    rm ~/Library/LaunchAgents/com.wsw.signal.plist
+
+  Change time: edit Hour/Minute below, then unload + load again.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.wsw.signal</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>/Users/juanarandaappelgren/Documents/Juan/AI_projects/wall-street-wolf/scripts/daily-signal.sh</string>
+  </array>
+
+  <key>StartCalendarInterval</key>
+  <array>
+    <dict><key>Weekday</key><integer>1</integer><key>Hour</key><integer>18</integer><key>Minute</key><integer>0</integer></dict>
+    <dict><key>Weekday</key><integer>2</integer><key>Hour</key><integer>18</integer><key>Minute</key><integer>0</integer></dict>
+    <dict><key>Weekday</key><integer>3</integer><key>Hour</key><integer>18</integer><key>Minute</key><integer>0</integer></dict>
+    <dict><key>Weekday</key><integer>4</integer><key>Hour</key><integer>18</integer><key>Minute</key><integer>0</integer></dict>
+    <dict><key>Weekday</key><integer>5</integer><key>Hour</key><integer>18</integer><key>Minute</key><integer>0</integer></dict>
+  </array>
+
+  <key>RunAtLoad</key>
+  <false/>
+
+  <key>StandardOutPath</key>
+  <string>/Users/juanarandaappelgren/Documents/Juan/AI_projects/wall-street-wolf/data/launchd.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/juanarandaappelgren/Documents/Juan/AI_projects/wall-street-wolf/data/launchd.log</string>
+</dict>
+</plist>
