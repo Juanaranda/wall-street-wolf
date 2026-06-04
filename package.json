@@ -20,7 +20,8 @@
     "train": "python3 scripts/train_model.py",
     "signal": "ts-node scripts/signal.ts",
     "fill": "ts-node scripts/fill.ts",
-    "review": "ts-node scripts/review.ts"
+    "review": "ts-node scripts/review.ts",
+    "weekly-review": "ts-node scripts/weekly-review.ts"
   },
   "dependencies": {
     "@alpacahq/alpaca-trade-api": "^3.1.3",

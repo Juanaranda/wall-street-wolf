@@ -17,6 +17,8 @@ import { logger } from '../shared/logger';
  */
 export interface Notifier {
   send(rec: Recommendation): Promise<void>;
+  /** Send a free-text message (e.g. the weekly review summary). */
+  sendText(message: string): Promise<void>;
 }
 
 /** Human-readable WhatsApp/console message for a recommendation. */
@@ -41,6 +43,10 @@ export class ConsoleNotifier implements Notifier {
   async send(rec: Recommendation): Promise<void> {
     logger.info(`Notifier (console):\n${formatRecommendation(rec)}`);
   }
+
+  async sendText(message: string): Promise<void> {
+    logger.info(`Notifier (console):\n${message}`);
+  }
 }
 
 /**
@@ -64,8 +70,14 @@ export class TwilioWhatsAppNotifier implements Notifier {
   }
 
   async send(rec: Recommendation): Promise<void> {
-    const body = formatRecommendation(rec);
+    await this.sendMessage(formatRecommendation(rec), `${rec.ticker} (${rec.action})`);
+  }
 
+  async sendText(message: string): Promise<void> {
+    await this.sendMessage(message, 'free-text');
+  }
+
+  private async sendMessage(body: string, label: string): Promise<void> {
     // Twilio Messages API requires application/x-www-form-urlencoded
     const params = new URLSearchParams({
       From: `whatsapp:${this.fromNumber}`,
@@ -83,7 +95,7 @@ export class TwilioWhatsAppNotifier implements Notifier {
           'Content-Type': 'application/x-www-form-urlencoded',
         },
       });
-      logger.info(`WhatsApp notification sent for ${rec.ticker} (${rec.action})`);
+      logger.info(`WhatsApp notification sent: ${label}`);
     } catch (err) {
       // A failed notification must NOT crash the pipeline.
       logger.error('TwilioWhatsAppNotifier: failed to send message', { err });

@@ -29,7 +29,7 @@ describe('SignalOrchestrator.runCycle', () => {
   const sizing = { bankrollUsd: 10000, basePct: 0.05, maxPct: 0.1, minUsd: 50 };
 
   it('recommends only confident long signals, sizes, notifies, and records them', async () => {
-    const notifier: Notifier & { send: jest.Mock } = { send: jest.fn(async () => {}) };
+    const notifier: Notifier & { send: jest.Mock } = { send: jest.fn(async () => {}), sendText: jest.fn(async () => {}) };
     const ledger: Ledger & { recordRecommendation: jest.Mock } = {
       recordRecommendation: jest.fn(),
       recordFill: jest.fn(),
