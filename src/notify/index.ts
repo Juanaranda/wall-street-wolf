@@ -10,6 +10,7 @@
 import axios from 'axios';
 import { Recommendation } from '../shared/types';
 import { logger } from '../shared/logger';
+import { EmailNotifier } from './email';
 
 /**
  * Delivers recommendations to the user. Decoupled so the channel (WhatsApp via
@@ -106,20 +107,26 @@ export class TwilioWhatsAppNotifier implements Notifier {
 /**
  * Factory that returns the appropriate notifier based on environment variables.
  *
- * Returns TwilioWhatsAppNotifier when all four Twilio env vars are set;
- * falls back to ConsoleNotifier otherwise.
+ * Priority: Email (SMTP) → WhatsApp (Twilio) → Console.
+ * Email is preferred because it's free with any SMTP provider; Console is the
+ * zero-config fallback so the pipeline always works (you just read it here).
  */
 export function createNotifier(): Notifier {
+  const email = EmailNotifier.fromEnv();
+  if (email) {
+    logger.info('Notifier: using EmailNotifier (SMTP)');
+    return email;
+  }
+
   const sid = process.env['TWILIO_ACCOUNT_SID'];
   const token = process.env['TWILIO_AUTH_TOKEN'];
   const from = process.env['TWILIO_WHATSAPP_FROM'];
   const to = process.env['USER_WHATSAPP_TO'];
-
   if (sid && token && from && to) {
     logger.info('Notifier: using TwilioWhatsAppNotifier');
     return new TwilioWhatsAppNotifier(sid, token, from, to);
   }
 
-  logger.info('Notifier: Twilio env vars not set — falling back to ConsoleNotifier');
+  logger.info('Notifier: no email/WhatsApp env set — using ConsoleNotifier (output shown here)');
   return new ConsoleNotifier();
 }
