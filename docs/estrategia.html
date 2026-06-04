@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Wall Street Wolf — Cómo funciona la estrategia</title>
+<style>
+  :root{
+    --bg:#0f1419; --card:#1a2129; --card2:#222c37; --ink:#e6edf3; --muted:#9aa7b4;
+    --green:#2ea043; --red:#e5534b; --amber:#d29922; --blue:#388bfd; --line:#2d3742;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.6 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+  .wrap{max-width:920px;margin:0 auto;padding:32px 20px 80px}
+  h1{font-size:30px;margin:0 0 4px} h2{font-size:21px;margin:36px 0 12px;border-bottom:1px solid var(--line);padding-bottom:6px}
+  h3{font-size:16px;margin:18px 0 6px;color:var(--blue)}
+  .sub{color:var(--muted);margin:0 0 24px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 20px;margin:14px 0}
+  .muted{color:var(--muted)} .green{color:var(--green)} .red{color:var(--red)} .amber{color:var(--amber)} .blue{color:var(--blue)}
+  .pill{display:inline-block;padding:2px 10px;border-radius:20px;font-size:12px;font-weight:600;vertical-align:middle}
+  .pill.yes{background:rgba(46,160,67,.15);color:var(--green)} .pill.no{background:rgba(229,83,75,.15);color:var(--red)}
+  .pill.soon{background:rgba(210,153,34,.15);color:var(--amber)}
+  table{width:100%;border-collapse:collapse;margin:8px 0}
+  th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line);font-size:14px}
+  th{color:var(--muted);font-weight:600}
+  .flow{display:flex;flex-wrap:wrap;gap:8px;align-items:stretch;margin:6px 0}
+  .step{flex:1;min-width:120px;background:var(--card2);border:1px solid var(--line);border-radius:10px;padding:12px;text-align:center}
+  .step .n{font-size:11px;color:var(--muted)} .step .t{font-weight:700;margin:3px 0} .step .d{font-size:12px;color:var(--muted)}
+  .arrow{align-self:center;color:var(--muted);font-size:20px}
+  code{background:#0b0f14;border:1px solid var(--line);border-radius:6px;padding:1px 6px;font-size:13px}
+  .mail{background:#0b0f14;border:1px solid var(--line);border-radius:10px;padding:16px;font-family:ui-monospace,Menlo,monospace;font-size:13px;white-space:pre-wrap}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  @media(max-width:640px){.grid2{grid-template-columns:1fr}}
+  .warn{background:rgba(210,153,34,.08);border:1px solid rgba(210,153,34,.4)}
+  .big{font-size:34px;font-weight:800;letter-spacing:-1px}
+  ul{margin:6px 0 6px 0;padding-left:20px} li{margin:3px 0}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>🐺 Wall Street Wolf</h1>
+  <p class="sub">Cómo funciona la estrategia, en simple — actualizado 2026-06-03</p>
+
+  <div class="card">
+    <strong>En una frase:</strong> el programa mira el <span class="blue">historial de precios</span> de un set de
+    acciones/ETF de EE.UU. (comprables en Fintual), detecta las que vienen con <strong>fuerte tendencia al alza
+    (momentum)</strong>, y te manda un <strong>reporte con cuáles comprar y cuánto</strong>. <span class="green">Tú ejecutas
+    manual en Fintual.</span> Es <strong>semi-automático</strong> y de <strong>baja frecuencia</strong>.
+  </div>
+
+  <h2>El flujo, paso a paso</h2>
+  <div class="flow">
+    <div class="step"><div class="n">1</div><div class="t">📋 Universo</div><div class="d">~54 acciones/ETF líquidos de EE.UU.</div></div>
+    <div class="arrow">→</div>
+    <div class="step"><div class="n">2</div><div class="t">📈 Datos</div><div class="d">24 años de precios (Postgres local)</div></div>
+    <div class="arrow">→</div>
+    <div class="step"><div class="n">3</div><div class="t">🧮 Señal</div><div class="d">Momentum 6 y 12 meses</div></div>
+    <div class="arrow">→</div>
+    <div class="step"><div class="n">4</div><div class="t">💰 Tamaño</div><div class="d">Cuánto invertir según confianza</div></div>
+    <div class="arrow">→</div>
+    <div class="step"><div class="n">5</div><div class="t">📧 Reporte</div><div class="d">Mail / consola con las compras</div></div>
+    <div class="arrow">→</div>
+    <div class="step"><div class="n">6</div><div class="t">📒 Registro</div><div class="d">Tú ejecutas y registras el fill</div></div>
+  </div>
+
+  <h2>⏱️ Horizonte temporal (esto es clave)</h2>
+  <div class="grid2">
+    <div class="card">
+      <h3>Qué mira para decidir</h3>
+      Mira el <strong>retorno de los últimos 6 y 12 meses</strong> de cada acción. La idea (momentum): lo que ha
+      subido sostenidamente <em>tiende a seguir subiendo</em> un tiempo más.
+    </div>
+    <div class="card">
+      <h3>Cuánto dura cada inversión</h3>
+      Es de <strong>mediano plazo: semanas a meses</strong>, no day-trading. En el backtest las posiciones ganadoras
+      se mantenían mientras la tendencia seguía (a veces meses).
+    </div>
+  </div>
+  <div class="card">
+    <h3>Cada cuánto te avisa</h3>
+    Tú corres <code>npm run signal</code> cuando quieras (ej. 1 vez por semana). Está pensado para
+    <strong>pocas señales al mes</strong> — calza con las <strong>10 órdenes gratis/mes de Fintual</strong>. Nada de estar comprando y vendiendo todo el día.
+  </div>
+
+  <h2>✅ Qué considera — y ❌ qué NO (todavía)</h2>
+  <table>
+    <tr><th>Factor</th><th>¿Lo usa hoy?</th><th>Detalle</th></tr>
+    <tr><td>Precio / historial</td><td><span class="pill yes">SÍ</span></td><td>Base de todo: 24 años de precios diarios ajustados.</td></tr>
+    <tr><td>Momentum (tendencia)</td><td><span class="pill yes">SÍ</span></td><td>Retorno a 6 y 12 meses; compra lo que sube fuerte y está cerca de máximos.</td></tr>
+    <tr><td>Volatilidad / indicadores</td><td><span class="pill yes">SÍ</span></td><td>RSI, MACD, etc. están calculados en el feature store (apoyo).</td></tr>
+    <tr><td><strong>Noticias / sentimiento</strong></td><td><span class="pill no">NO aún</span></td><td>Existe un módulo de noticias en el código, pero <strong>no está conectado</strong> a la señal. Hoy la decisión es puramente técnica (precio).</td></tr>
+    <tr><td>Fundamentales (ventas, P/E…)</td><td><span class="pill no">NO</span></td><td>No se consideran balances ni resultados de la empresa.</td></tr>
+    <tr><td>Señales de VENTA</td><td><span class="pill soon">PARCIAL</span></td><td>Hoy el reporte te dice qué <strong>comprar</strong>. La lógica de salida existe en el backtest, pero el aviso de "vende esto" en vivo aún no está enchufado.</td></tr>
+  </table>
+
+  <h2>💰 Cómo decide cuánto invertir</h2>
+  <div class="card">
+    Monto sugerido = un <strong>% chico de tu capital</strong> (base 5%), <strong>escalado por la confianza</strong> de la señal,
+    con <strong>tope del 10%</strong> por posición y un <strong>piso</strong> para no hacer órdenes ridículas.
+    <ul>
+      <li>Confianza 100% → ~5% del capital · Confianza 50% → ~3.75%</li>
+      <li>Tope duro: 10% del capital en una sola acción</li>
+      <li>Configurable con <code>INITIAL_BANKROLL</code> en tu <code>.env</code></li>
+    </ul>
+    <span class="muted">Conservador a propósito: nada de apalancamiento ni apostar todo a una.</span>
+  </div>
+
+  <h2>📧 Así se ve el reporte que recibes</h2>
+  <div class="mail">📲 3 señal(es) — ejecuta manual en Fintual:
+
+ • 🟢 COMPRAR AMD   ~US$50   (confianza 100%)
+     Advanced Micro Devices: momentum 6m +139.8%, 12m +371.0%
+     id: 6be8b5d5…
+ • 🟢 COMPRAR CAT   ~US$50   (confianza 100%)
+     Caterpillar: momentum 6m +58.7%, 12m +164.2%
+ • 🟢 COMPRAR XLK   ~US$50   (confianza 88%)
+     Technology Select Sector SPDR: momentum 6m +38.9%, 12m +72.7%
+
+⚠️ Sugerencia, no asesoría. Ejecuta manual en Fintual.</div>
+  <p class="muted">Luego registras tu compra real: <code>npm run fill -- &lt;id&gt; &lt;ticker&gt; &lt;precio&gt; &lt;acciones&gt;</code>,
+  y el sistema sigue tu resultado real con <code>npm run review</code>.</p>
+
+  <h2>📊 ¿Por qué creemos que sirve?</h2>
+  <div class="card">
+    Validamos la estrategia sobre <strong>24 años (2002–2026)</strong>, entrenando hasta 2016 y probando en 2016–2026
+    (incluye el crash de 2008 y el oso de 2022). El momentum aguantó <strong>fuera de muestra</strong>:
+    <table>
+      <tr><th>Período</th><th>Win rate</th><th>Retorno/trade</th><th>Profit Factor</th></tr>
+      <tr><td>Entrenamiento (02–16)</td><td>53%</td><td>+14.0%</td><td>4.71</td></tr>
+      <tr><td><span class="green">Validación (16–26)</span></td><td>49%</td><td>+14.3%</td><td>4.89</td></tr>
+    </table>
+  </div>
+
+  <h2 class="amber">⚠️ Lo honesto (léelo)</h2>
+  <div class="card warn">
+    <ul>
+      <li><strong>Paper primero.</strong> Estamos en modo práctica. Valida varias semanas antes de plata real.</li>
+      <li><strong>Survivorship bias:</strong> probamos con empresas que <em>hoy</em> existen (las que quebraron no están), lo que infla los números. El edge real es más modesto.</li>
+      <li>El <strong>retorno por trade</strong> es de operaciones que duran semanas/meses — no es ganancia semanal.</li>
+      <li>Un modelo de ML que probamos <strong>no superó al azar</strong> fuera de muestra: predecir el corto plazo es difícil. Por eso usamos la regla de momentum, no una "IA mágica".</li>
+      <li>Esto es una <strong>herramienta de disciplina</strong>, no plata garantizada.</li>
+    </ul>
+  </div>
+
+  <h2>🔜 Lo que falta / próximos pasos</h2>
+  <div class="card">
+    <ul>
+      <li>Conectar el módulo de <strong>noticias/sentimiento</strong> como filtro de las señales.</li>
+      <li>Enchufar los <strong>avisos de venta</strong> en vivo (cuándo salir).</li>
+      <li>Arreglar el <strong>survivorship bias</strong> para confiar más en los números.</li>
+      <li>Reformular el ML como <strong>ranking entre acciones</strong> (no "sube/baja" absoluto).</li>
+    </ul>
+  </div>
+
+  <p class="muted" style="margin-top:30px;text-align:center">Wall Street Wolf · estrategia: momentum largo-only · ejecución manual en Fintual · paper</p>
+</div>
+</body>
+</html>
