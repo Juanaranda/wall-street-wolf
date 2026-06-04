@@ -19,7 +19,8 @@
     "export-gold": "ts-node scripts/export-gold.ts",
     "train": "python3 scripts/train_model.py",
     "signal": "ts-node scripts/signal.ts",
-    "fill": "ts-node scripts/fill.ts"
+    "fill": "ts-node scripts/fill.ts",
+    "review": "ts-node scripts/review.ts"
   },
   "dependencies": {
     "@alpacahq/alpaca-trade-api": "^3.1.3",

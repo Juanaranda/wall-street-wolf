@@ -34,6 +34,8 @@ describe('SignalOrchestrator.runCycle', () => {
       recordRecommendation: jest.fn(),
       recordFill: jest.fn(),
       openPositions: () => [],
+      getRecommendations: () => [],
+      getFills: () => [],
     };
 
     const orch = new SignalOrchestrator(universe, data, engine, notifier, ledger, sizing);

@@ -71,6 +71,10 @@ export interface Ledger {
   recordRecommendation(rec: Recommendation): void;
   recordFill(fill: ManualFill): void;
   openPositions(): PaperPosition[];
+  /** All recommendations ever recorded (for review/learning). */
+  getRecommendations(): Recommendation[];
+  /** All manual fills ever recorded. */
+  getFills(): ManualFill[];
 }
 
 // ─── Implementation ───────────────────────────────────────────────────────────
@@ -182,6 +186,32 @@ export class PaperLedger implements Ledger {
     }
 
     return positions;
+  }
+
+  getRecommendations(): Recommendation[] {
+    return this.events
+      .filter((e): e is RecommendationEvent => e.type === 'recommendation')
+      .map((e) => ({
+        id: e.id,
+        ticker: e.ticker,
+        action: e.action,
+        suggestedAmountUsd: e.suggestedAmountUsd,
+        confidence: e.confidence,
+        rationale: e.rationale,
+        createdAt: new Date(e.createdAt),
+      }));
+  }
+
+  getFills(): ManualFill[] {
+    return this.events
+      .filter((e): e is FillEvent => e.type === 'fill')
+      .map((e) => ({
+        recommendationId: e.recommendationId,
+        ticker: e.ticker,
+        filledPrice: e.filledPrice,
+        shares: e.shares,
+        filledAt: new Date(e.filledAt),
+      }));
   }
 
   // ── Private helpers ─────────────────────────────────────────────────────────
