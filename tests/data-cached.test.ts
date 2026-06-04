@@ -56,12 +56,13 @@ function makeStore(
 // ---------------------------------------------------------------------------
 
 describe('getBars — cache hit', () => {
-  it('returns cached bars without calling the source', async () => {
+  it('returns cached bars without calling the source when fresh', async () => {
     const limit = 3;
+    // Newest bar is "now" (daysAgo 0) → fresh.
     const cachedBars = [
-      makeBar('AAPL', 180, 3),
-      makeBar('AAPL', 181, 2),
-      makeBar('AAPL', 182, 1),
+      makeBar('AAPL', 180, 2),
+      makeBar('AAPL', 181, 1),
+      makeBar('AAPL', 182, 0),
     ];
 
     const store = makeStore({
@@ -78,9 +79,9 @@ describe('getBars — cache hit', () => {
     expect(store.upsertBars).not.toHaveBeenCalled();
   });
 
-  it('treats store returning exactly limit bars as a hit', async () => {
+  it('treats store returning exactly limit fresh bars as a hit', async () => {
     const limit = 2;
-    const cachedBars = [makeBar('MSFT', 300, 2), makeBar('MSFT', 302, 1)];
+    const cachedBars = [makeBar('MSFT', 300, 1), makeBar('MSFT', 302, 0)];
 
     const store = makeStore({
       getRecentBars: jest.fn().mockResolvedValue(cachedBars),
@@ -92,6 +93,26 @@ describe('getBars — cache hit', () => {
 
     expect(result).toEqual(cachedBars);
     expect(source.getBars).not.toHaveBeenCalled();
+  });
+
+  it('refreshes from source when cached data is STALE (auto-maintains)', async () => {
+    const limit = 2;
+    // Enough bars, but newest is 5 days old → stale → must refresh.
+    const staleBars = [makeBar('AAPL', 180, 6), makeBar('AAPL', 181, 5)];
+    const freshBars = [makeBar('AAPL', 182, 1), makeBar('AAPL', 183, 0)];
+
+    const store = makeStore({
+      getRecentBars: jest.fn().mockResolvedValue(staleBars),
+      upsertBars: jest.fn().mockResolvedValue(2),
+    });
+    const source = makeSource({ getBars: jest.fn().mockResolvedValue(freshBars) });
+
+    const provider = new CachedDataProvider(source, store, 'yahoo');
+    const result = await provider.getBars('AAPL', '1Day', limit);
+
+    expect(source.getBars).toHaveBeenCalledWith('AAPL', '1Day', limit);
+    expect(store.upsertBars).toHaveBeenCalledWith('1Day', freshBars, 'yahoo');
+    expect(result).toEqual(freshBars);
   });
 });
 
