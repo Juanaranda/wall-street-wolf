@@ -10,6 +10,8 @@ import { MomentumEngine } from './signals/strategies/momentum';
 import { Notifier, createNotifier } from './notify';
 import { Ledger, PaperLedger } from './ledger';
 import { sizePosition, DEFAULT_SIZING, SizingConfig } from './risk/equity-sizing';
+import { SignalReviewer } from './compound/signal-review';
+import { sendWeeklyReview } from './compound/weekly-review';
 
 /**
  * Semi-automated signal pipeline:
@@ -22,6 +24,7 @@ import { sizePosition, DEFAULT_SIZING, SizingConfig } from './risk/equity-sizing
 export class SignalOrchestrator {
   private isRunning = false;
   private job: schedule.Job | null = null;
+  private weeklyJob: schedule.Job | null = null;
 
   constructor(
     private readonly universe: UniverseProvider = new StaticUniverse(),
@@ -99,6 +102,22 @@ export class SignalOrchestrator {
     this.job = schedule.scheduleJob(`*/${intervalMinutes} * * * *`, () => {
       if (this.isRunning && !isKillSwitchActive()) void this.runCycle();
     });
+
+    // Weekly review summary — Sundays 18:00 (#13).
+    this.weeklyJob = schedule.scheduleJob('0 18 * * 0', () => {
+      if (this.isRunning) void this.runWeeklyReview();
+    });
+  }
+
+  /** Build and send the weekly review summary. */
+  async runWeeklyReview(): Promise<void> {
+    try {
+      const reviewer = new SignalReviewer(this.ledger, this.data);
+      await sendWeeklyReview(reviewer, this.notifier);
+      logger.info('SignalOrchestrator: weekly review sent');
+    } catch (err) {
+      logger.warn('SignalOrchestrator: weekly review failed', { err });
+    }
   }
 
   stop(): void {
@@ -107,6 +126,10 @@ export class SignalOrchestrator {
     if (this.job) {
       this.job.cancel();
       this.job = null;
+    }
+    if (this.weeklyJob) {
+      this.weeklyJob.cancel();
+      this.weeklyJob = null;
     }
   }
 }
