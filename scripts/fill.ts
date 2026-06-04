@@ -11,6 +11,7 @@ function main(): void {
   const [recId, ticker, price, shares] = process.argv.slice(2);
   if (!recId || !ticker || !price || !shares) {
     console.error('Usage: npm run fill -- <recommendationId> <ticker> <price> <shares>');
+    console.error('  Compra: shares positivas (ej. 5).  Venta: shares NEGATIVAS (ej. -5).');
     process.exit(1);
   }
   const filledPrice = parseFloat(price);

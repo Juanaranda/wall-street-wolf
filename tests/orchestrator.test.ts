@@ -41,12 +41,33 @@ describe('SignalOrchestrator.runCycle', () => {
     const orch = new SignalOrchestrator(universe, data, engine, notifier, ledger, sizing);
     const recs = await orch.runCycle();
 
-    // AAA passes; BBB below confidence; CCC is a sell (long-only ignores it).
+    // AAA passes (buy); BBB below confidence; CCC is a sell but we don't hold it → ignored.
     expect(recs).toHaveLength(1);
     expect(recs[0]!.ticker).toBe('AAA');
     expect(recs[0]!.action).toBe('buy');
     expect(recs[0]!.suggestedAmountUsd).toBe(475); // conf 0.9 → 4.75% of 10000
     expect(notifier.send).toHaveBeenCalledTimes(1);
     expect(ledger.recordRecommendation).toHaveBeenCalledTimes(1);
+  });
+
+  it('emits a SELL to exit a held position whose momentum faded', async () => {
+    const notifier: Notifier & { send: jest.Mock } = { send: jest.fn(async () => {}), sendText: jest.fn(async () => {}) };
+    const ledger: Ledger = {
+      recordRecommendation: jest.fn(),
+      recordFill: jest.fn(),
+      openPositions: () => [{ ticker: 'CCC', shares: 5, entryPrice: 20, openedAt: new Date() }],
+      getRecommendations: () => [],
+      getFills: () => [],
+    };
+
+    const orch = new SignalOrchestrator(universe, data, engine, notifier, ledger, sizing);
+    const recs = await orch.runCycle();
+
+    // We hold CCC and its signal is 'sell' → exit; AAA is still a new buy.
+    const sell = recs.find((r) => r.ticker === 'CCC');
+    expect(sell).toBeDefined();
+    expect(sell!.action).toBe('sell');
+    expect(sell!.rationale).toContain('Vender tus 5 acciones');
+    expect(recs.find((r) => r.ticker === 'AAA')?.action).toBe('buy');
   });
 });
