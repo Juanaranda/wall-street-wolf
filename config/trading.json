@@ -1,6 +1,7 @@
 {
-  "bankrollUsd": 100,
+  "bankrollUsd": 210,
   "basePct": 0.05,
   "maxPct": 0.10,
-  "minUsd": 1
+  "minUsd": 1,
+  "_note": "bankrollUsd ~= 200.000 CLP (satélite). Actualiza este número a medida que aportas tus 100k/mes. El núcleo (2M en Risky Norris) NO va aquí."
 }
