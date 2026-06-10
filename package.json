@@ -21,7 +21,8 @@
     "signal": "ts-node scripts/signal.ts",
     "fill": "ts-node scripts/fill.ts",
     "review": "ts-node scripts/review.ts",
-    "weekly-review": "ts-node scripts/weekly-review.ts"
+    "weekly-review": "ts-node scripts/weekly-review.ts",
+    "import-fintual": "ts-node scripts/import-fintual.ts"
   },
   "dependencies": {
     "@alpacahq/alpaca-trade-api": "^3.1.3",
@@ -33,6 +34,8 @@
     "dotenv": "^16.4.7",
     "ethers": "^6.13.4",
     "express": "^5.2.1",
+    "imapflow": "^1.4.0",
+    "mailparser": "^3.9.9",
     "node-schedule": "^2.1.1",
     "nodemailer": "^8.0.10",
     "openai": "^4.77.0",
@@ -60,6 +63,7 @@
   "devDependencies": {
     "@types/express": "^5.0.6",
     "@types/jest": "^29.5.14",
+    "@types/mailparser": "^3.4.6",
     "@types/node": "^22.10.10",
     "@types/node-schedule": "^2.1.7",
     "@types/nodemailer": "^8.0.0",
