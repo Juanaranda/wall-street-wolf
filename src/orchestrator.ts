@@ -6,7 +6,7 @@ import { Instrument, Signal, Recommendation } from './shared/types';
 import { UniverseProvider, StaticUniverse } from './universe';
 import { MarketDataProvider, createDataProvider } from './data';
 import { SignalEngine } from './signals';
-import { MomentumEngine } from './signals/strategies/momentum';
+import { createSignalEngine } from './signals/factory';
 import { Notifier, createNotifier } from './notify';
 import { Ledger, PaperLedger } from './ledger';
 import { sizePosition, DEFAULT_SIZING, SizingConfig } from './risk/equity-sizing';
@@ -31,7 +31,7 @@ export class SignalOrchestrator {
   constructor(
     private readonly universe: UniverseProvider = new StaticUniverse(),
     private readonly data: MarketDataProvider = createDataProvider(),
-    private readonly signals: SignalEngine = new MomentumEngine(),
+    private readonly signals: SignalEngine = createSignalEngine(),
     private readonly notifier: Notifier = createNotifier(),
     private readonly ledger: Ledger = new PaperLedger(),
     private readonly sizing: SizingConfig = DEFAULT_SIZING
