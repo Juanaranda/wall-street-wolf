@@ -27,7 +27,7 @@ export class EmailNotifier implements Notifier {
   }
 
   async sendText(message: string): Promise<void> {
-    const subject = message.split('\n')[0]?.slice(0, 120) || 'Wall Street Wolf';
+    const subject = message.split('\n')[0]?.slice(0, 120) || 'Plan de inversión';
     await this.email(subject, message);
   }
 

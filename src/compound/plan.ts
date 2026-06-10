@@ -15,7 +15,7 @@ export function formatPlan(
 ): string {
   const buys = recommendations.filter((r) => r.action === 'buy');
   const sells = recommendations.filter((r) => r.action === 'sell');
-  const lines: string[] = [`📊 Wall Street Wolf — Plan de inversión (${now.toISOString().slice(0, 10)})`, ''];
+  const lines: string[] = [`📊 Plan de inversión (${now.toISOString().slice(0, 10)})`, ''];
 
   // ── Saldo / cartera ──
   lines.push('💼 Tu cartera (saldo actual):');
