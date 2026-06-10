@@ -11,5 +11,8 @@ mkdir -p data
 {
   echo ""
   echo "════════ $(date '+%Y-%m-%d %H:%M:%S') ════════"
+  echo "--- import-fintual (sincroniza tus compras/ventas desde el correo) ---"
+  npm run import-fintual
+  echo "--- signal (genera plan + lo envía por correo) ---"
   npm run signal
 } >> data/signal.log 2>&1
