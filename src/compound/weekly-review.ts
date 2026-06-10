@@ -5,7 +5,7 @@ import { Notifier } from '../notify';
 export function formatWeeklyReview(report: LearningReport, now: Date = new Date()): string {
   const pct = (n: number | null) => (n === null ? '—' : `${(n * 100).toFixed(1)}%`);
   return [
-    `📊 Wall Street Wolf — Resumen semanal (${now.toISOString().slice(0, 10)})`,
+    `📊 Resumen semanal (${now.toISOString().slice(0, 10)})`,
     ``,
     `Recomendaciones: ${report.totalRecommendations} (ejecutadas ${report.filled}, sin ejecutar ${report.unfilled})`,
     `Evaluadas: ${report.evaluated} · Win rate: ${pct(report.winRate)} · Retorno medio: ${pct(report.avgReturnPct)}`,
