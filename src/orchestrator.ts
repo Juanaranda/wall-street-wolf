@@ -12,6 +12,8 @@ import { Ledger, PaperLedger } from './ledger';
 import { sizePosition, DEFAULT_SIZING, SizingConfig } from './risk/equity-sizing';
 import { SignalReviewer } from './compound/signal-review';
 import { sendWeeklyReview } from './compound/weekly-review';
+import { buildPortfolio } from './compound/portfolio';
+import { formatPlan } from './compound/plan';
 
 /**
  * Semi-automated signal pipeline:
@@ -81,9 +83,12 @@ export class SignalOrchestrator {
 
     // Sells first — exits matter more than new entries.
     const recommendations = [...sells, ...buys];
-    for (const rec of recommendations) {
-      this.ledger.recordRecommendation(rec);
-      await this.notifier.send(rec);
+    for (const rec of recommendations) this.ledger.recordRecommendation(rec);
+
+    // One consolidated plan email (buys + sells + current balance), not one per rec.
+    if (recommendations.length > 0) {
+      const portfolio = await buildPortfolio(this.ledger, this.data);
+      await this.notifier.sendText(formatPlan(recommendations, portfolio));
     }
 
     logger.info(

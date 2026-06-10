@@ -46,7 +46,8 @@ describe('SignalOrchestrator.runCycle', () => {
     expect(recs[0]!.ticker).toBe('AAA');
     expect(recs[0]!.action).toBe('buy');
     expect(recs[0]!.suggestedAmountUsd).toBe(475); // conf 0.9 → 4.75% of 10000
-    expect(notifier.send).toHaveBeenCalledTimes(1);
+    expect(notifier.sendText).toHaveBeenCalledTimes(1); // one consolidated plan email
+    expect(notifier.send).not.toHaveBeenCalled();
     expect(ledger.recordRecommendation).toHaveBeenCalledTimes(1);
   });
 
