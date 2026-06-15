@@ -16,8 +16,8 @@ async function main(): Promise<void> {
   const pct = (n: number | null) => (n === null ? '—' : `${(n * 100).toFixed(1)}%`);
 
   console.log('\n═══ Signal Review (track record real) ═══');
-  console.log(`Recomendaciones: ${r.totalRecommendations}  (ejecutadas ${r.filled}, sin ejecutar ${r.unfilled})`);
-  console.log(`Evaluadas: ${r.evaluated}   Win rate: ${pct(r.winRate)}   Retorno medio: ${pct(r.avgReturnPct)}`);
+  console.log(`Posiciones: ${r.positions}   Evaluadas: ${r.evaluated}   (recomendaciones en registro: ${r.recommendationsOnRecord})`);
+  console.log(`Win rate: ${pct(r.winRate)}   Retorno medio: ${pct(r.avgReturnPct)}   P&L: US$${r.totalPnlUsd.toFixed(2)}`);
 
   console.log('\nCalibración (¿más confianza = más aciertos?):');
   for (const b of r.calibration) {

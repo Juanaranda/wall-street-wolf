@@ -1,16 +1,19 @@
-import { Recommendation, ManualFill } from '../shared/types';
 import { Ledger } from '../ledger';
 import { MarketDataProvider } from '../data';
+import { buildPortfolio } from './portfolio';
 
-/** One recommendation evaluated against its (optional) fill and current price. */
-export interface ReviewedRecommendation {
-  recommendation: Recommendation;
-  fill: ManualFill | null;
+/** One real holding evaluated at the current price (the actual track record). */
+export interface ReviewedPosition {
+  ticker: string;
+  shares: number;
+  entryPrice: number;
   currentPrice: number | null;
-  /** (currentPrice − fillPrice) / fillPrice, or null if not filled/priced. */
+  costUsd: number;
+  valueUsd: number | null;
   returnPct: number | null;
-  status: 'unfilled' | 'open';
   win: boolean | null;
+  /** Confidence of the most recent recommendation for this ticker, if any. */
+  confidence: number | null;
   lesson: string | null;
 }
 
@@ -22,15 +25,14 @@ export interface ConfidenceBucket {
   avgReturnPct: number | null;
 }
 
-/** Aggregate learning over the system's REAL recommendations (not backtest). */
+/** Aggregate learning over the user's REAL positions (survivorship-free). */
 export interface LearningReport {
-  totalRecommendations: number;
-  filled: number;
-  unfilled: number;
+  positions: number;
   evaluated: number;
   winRate: number | null;
   avgReturnPct: number | null;
-  /** Is the system's stated confidence calibrated on real trades? */
+  totalPnlUsd: number;
+  recommendationsOnRecord: number;
   calibration: ConfidenceBucket[];
   lessons: string[];
 }
@@ -42,10 +44,10 @@ const BUCKETS: Array<[number, number]> = [
 ];
 
 /**
- * Closes the learning loop: reviews real recommendations against fills + current
- * prices, measures realized performance and confidence calibration, and distills
- * plain-language lessons. (Survivorship-free: this is the system's ACTUAL track
- * record, the most honest feedback signal there is.)
+ * Closes the learning loop using ACTUAL positions (from imported fills), valued at
+ * current prices — not by matching recommendation IDs (imported fills don't carry
+ * the original recommendation id). Confidence for calibration is attached from the
+ * most recent recommendation per ticker.
  */
 export class SignalReviewer {
   constructor(
@@ -53,42 +55,53 @@ export class SignalReviewer {
     private readonly data: MarketDataProvider
   ) {}
 
-  async review(): Promise<ReviewedRecommendation[]> {
-    const recs = this.ledger.getRecommendations();
-    const fillByRec = new Map(this.ledger.getFills().map((f) => [f.recommendationId, f]));
+  /** Latest recommendation confidence per ticker (for calibration). */
+  private confidenceByTicker(): Map<string, number> {
+    const map = new Map<string, number>();
+    const recs = [...this.ledger.getRecommendations()].sort(
+      (a, b) => a.createdAt.getTime() - b.createdAt.getTime()
+    );
+    for (const r of recs) map.set(r.ticker, r.confidence); // last wins
+    return map;
+  }
 
-    const out: ReviewedRecommendation[] = [];
-    for (const rec of recs) {
-      const fill = fillByRec.get(rec.id) ?? null;
-      if (!fill) {
-        out.push({ recommendation: rec, fill: null, currentPrice: null, returnPct: null, status: 'unfilled', win: null, lesson: 'no ejecutada' });
-        continue;
-      }
-      const currentPrice = await this.data.getLatestPrice(rec.ticker).catch(() => null);
-      let returnPct: number | null = null;
-      let win: boolean | null = null;
-      let lesson: string | null = null;
-      if (currentPrice != null && fill.filledPrice > 0) {
-        returnPct = (currentPrice - fill.filledPrice) / fill.filledPrice;
-        win = returnPct > 0;
-        if (!win) {
-          lesson = `${rec.ticker}: −${Math.abs(returnPct * 100).toFixed(1)}% desde la compra (confianza ${(rec.confidence * 100).toFixed(0)}%) — el momentum se desvaneció`;
-        }
-      }
-      out.push({ recommendation: rec, fill, currentPrice, returnPct, status: 'open', win, lesson });
-    }
-    return out;
+  async review(): Promise<ReviewedPosition[]> {
+    const portfolio = await buildPortfolio(this.ledger, this.data);
+    const confByTicker = this.confidenceByTicker();
+
+    return portfolio.holdings.map((h) => {
+      const win = h.pnlPct === null ? null : h.pnlPct > 0;
+      const lesson =
+        win === false
+          ? `${h.ticker}: ${(h.pnlPct! * 100).toFixed(1)}% desde la compra — vigilar el momentum`
+          : null;
+      return {
+        ticker: h.ticker,
+        shares: h.shares,
+        entryPrice: h.entryPrice,
+        currentPrice: h.currentPrice,
+        costUsd: h.costUsd,
+        valueUsd: h.valueUsd,
+        returnPct: h.pnlPct,
+        win,
+        confidence: confByTicker.get(h.ticker) ?? null,
+        lesson,
+      };
+    });
   }
 
   async summarize(): Promise<LearningReport> {
     const reviews = await this.review();
-    const filled = reviews.filter((r) => r.fill !== null);
     const evaluated = reviews.filter((r) => r.returnPct !== null);
     const wins = evaluated.filter((r) => r.win).length;
     const avg = evaluated.length ? mean(evaluated.map((r) => r.returnPct as number)) : null;
+    const totalPnlUsd = reviews.reduce(
+      (s, r) => s + (r.valueUsd !== null ? r.valueUsd - r.costUsd : 0),
+      0
+    );
 
     const calibration: ConfidenceBucket[] = BUCKETS.map(([lo, hi]) => {
-      const inB = evaluated.filter((r) => r.recommendation.confidence >= lo && r.recommendation.confidence < hi);
+      const inB = evaluated.filter((r) => r.confidence !== null && r.confidence >= lo && r.confidence < hi);
       const w = inB.filter((r) => r.win).length;
       return {
         range: `${lo.toFixed(2)}–${hi >= 1 ? '1.00' : hi.toFixed(2)}`,
@@ -100,40 +113,37 @@ export class SignalReviewer {
     });
 
     return {
-      totalRecommendations: reviews.length,
-      filled: filled.length,
-      unfilled: reviews.length - filled.length,
+      positions: reviews.length,
       evaluated: evaluated.length,
       winRate: evaluated.length ? wins / evaluated.length : null,
       avgReturnPct: avg,
+      totalPnlUsd,
+      recommendationsOnRecord: this.ledger.getRecommendations().length,
       calibration,
-      lessons: this.distill(reviews, evaluated.length, wins, avg),
+      lessons: this.distill(reviews, evaluated.length, wins, avg, totalPnlUsd),
     };
   }
 
   private distill(
-    reviews: ReviewedRecommendation[],
+    reviews: ReviewedPosition[],
     evaluated: number,
     wins: number,
-    avg: number | null
+    avg: number | null,
+    totalPnlUsd: number
   ): string[] {
     const lessons: string[] = [];
-    if (evaluated === 0) {
-      lessons.push('Aún no hay trades evaluables — registra tus fills con `npm run fill` para empezar a aprender.');
+    if (reviews.length === 0) {
+      lessons.push('Aún no tienes posiciones — corre `npm run import-fintual` para traer tus compras.');
       return lessons;
     }
     if (evaluated < 5) {
-      lessons.push(`Muestra chica (${evaluated} trades): las conclusiones son tentativas — sigue acumulando historial.`);
+      lessons.push(`Muestra chica (${evaluated} posiciones): conclusiones tentativas — sigue acumulando historial.`);
     }
-    lessons.push(`Track record real: ${wins}/${evaluated} ganadores (${((wins / evaluated) * 100).toFixed(0)}%), retorno medio ${((avg ?? 0) * 100).toFixed(1)}%.`);
-
-    const unfilled = reviews.filter((r) => r.status === 'unfilled').length;
-    if (unfilled > 0) lessons.push(`${unfilled} recomendación(es) no ejecutada(s) — registra fills o ignóralas conscientemente.`);
-
+    lessons.push(
+      `Cartera: ${reviews.length} posiciones, ${wins}/${evaluated} en verde, retorno medio ${((avg ?? 0) * 100).toFixed(1)}%, P&L US$${totalPnlUsd.toFixed(2)}.`
+    );
     const losers = reviews.filter((r) => r.win === false);
-    if (losers.length > 0) {
-      lessons.push(`Perdedores: ${losers.map((l) => l.recommendation.ticker).join(', ')}.`);
-    }
+    if (losers.length > 0) lessons.push(`En rojo: ${losers.map((l) => l.ticker).join(', ')}.`);
     return lessons;
   }
 }

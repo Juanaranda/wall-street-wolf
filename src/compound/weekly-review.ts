@@ -7,8 +7,7 @@ export function formatWeeklyReview(report: LearningReport, now: Date = new Date(
   return [
     `📊 Resumen semanal (${now.toISOString().slice(0, 10)})`,
     ``,
-    `Recomendaciones: ${report.totalRecommendations} (ejecutadas ${report.filled}, sin ejecutar ${report.unfilled})`,
-    `Evaluadas: ${report.evaluated} · Win rate: ${pct(report.winRate)} · Retorno medio: ${pct(report.avgReturnPct)}`,
+    `Posiciones: ${report.positions} · Win rate: ${pct(report.winRate)} · Retorno medio: ${pct(report.avgReturnPct)} · P&L US$${report.totalPnlUsd.toFixed(2)}`,
     ``,
     `Calibración (confianza → aciertos):`,
     ...report.calibration.map((b) => `  ${b.range}: n=${b.n} win=${pct(b.winRate)}`),
