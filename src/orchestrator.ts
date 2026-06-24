@@ -85,9 +85,11 @@ export class SignalOrchestrator {
     const recommendations = [...sells, ...buys];
     for (const rec of recommendations) this.ledger.recordRecommendation(rec);
 
-    // One consolidated plan email (buys + sells + current balance), not one per rec.
-    if (recommendations.length > 0) {
-      const portfolio = await buildPortfolio(this.ledger, this.data);
+    // One consolidated plan email per run (buys + sells + current balance).
+    // Send daily whenever there's anything to report OR any holding, so you always
+    // get a heartbeat + your saldo — even on quiet days with no new signals.
+    const portfolio = await buildPortfolio(this.ledger, this.data);
+    if (recommendations.length > 0 || portfolio.holdings.length > 0) {
       await this.notifier.sendText(formatPlan(recommendations, portfolio));
     }
 
