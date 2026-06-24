@@ -20,6 +20,7 @@
     "train": "python3 scripts/train_model.py",
     "signal": "ts-node scripts/signal.ts",
     "fill": "ts-node scripts/fill.ts",
+    "deposit": "ts-node scripts/deposit.ts",
     "review": "ts-node scripts/review.ts",
     "weekly-review": "ts-node scripts/weekly-review.ts",
     "import-fintual": "ts-node scripts/import-fintual.ts"

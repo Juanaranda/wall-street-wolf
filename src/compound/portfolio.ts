@@ -17,9 +17,13 @@ export interface Holding {
 export interface PortfolioSummary {
   holdings: Holding[];
   totalCostUsd: number;
-  totalValueUsd: number;
+  totalValueUsd: number; // market value of holdings
   totalPnlUsd: number;
   totalPnlPct: number | null;
+  /** Available cash to invest (deposits − buys + sells). */
+  cashUsd: number;
+  /** Account value = cash + holdings value. */
+  accountValueUsd: number;
 }
 
 /**
@@ -49,6 +53,15 @@ export async function buildPortfolio(
 
   const totalPnlUsd = totalValueUsd - totalCostUsd;
   const totalPnlPct = totalCostUsd > 0 ? totalPnlUsd / totalCostUsd : null;
+  const cashUsd = ledger.cashBalance();
 
-  return { holdings, totalCostUsd, totalValueUsd, totalPnlUsd, totalPnlPct };
+  return {
+    holdings,
+    totalCostUsd,
+    totalValueUsd,
+    totalPnlUsd,
+    totalPnlPct,
+    cashUsd,
+    accountValueUsd: cashUsd + totalValueUsd,
+  };
 }

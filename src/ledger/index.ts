@@ -25,7 +25,21 @@ interface FillEvent {
   filledAt: string; // ISO-8601
 }
 
-type LedgerEvent = RecommendationEvent | FillEvent;
+interface DepositEvent {
+  type: 'deposit';
+  amountUsd: number; // positive = deposit, negative = withdrawal
+  at: string; // ISO-8601
+  note?: string;
+}
+
+type LedgerEvent = RecommendationEvent | FillEvent | DepositEvent;
+
+/** A recorded cash deposit/withdrawal. */
+export interface Deposit {
+  amountUsd: number;
+  at: Date;
+  note?: string;
+}
 
 // ─── Serialisation helpers ────────────────────────────────────────────────────
 
@@ -55,7 +69,7 @@ function serializeFill(fill: ManualFill): FillEvent {
 
 function deserializeEvent(raw: unknown): LedgerEvent {
   const ev = raw as LedgerEvent;
-  if (ev.type !== 'recommendation' && ev.type !== 'fill') {
+  if (ev.type !== 'recommendation' && ev.type !== 'fill' && ev.type !== 'deposit') {
     throw new Error(`Unknown ledger event type: ${String((raw as Record<string, unknown>)['type'])}`);
   }
   return ev;
@@ -75,6 +89,12 @@ export interface Ledger {
   getRecommendations(): Recommendation[];
   /** All manual fills ever recorded. */
   getFills(): ManualFill[];
+  /** Record a cash deposit (positive) or withdrawal (negative). */
+  recordDeposit(amountUsd: number, at?: Date, note?: string): void;
+  /** All deposits/withdrawals ever recorded. */
+  getDeposits(): Deposit[];
+  /** Available cash = deposits − buy costs + sell proceeds. */
+  cashBalance(): number;
 }
 
 // ─── Implementation ───────────────────────────────────────────────────────────
@@ -212,6 +232,28 @@ export class PaperLedger implements Ledger {
         shares: e.shares,
         filledAt: new Date(e.filledAt),
       }));
+  }
+
+  recordDeposit(amountUsd: number, at: Date = new Date(), note?: string): void {
+    const event: DepositEvent = { type: 'deposit', amountUsd, at: at.toISOString(), ...(note ? { note } : {}) };
+    this.appendEvent(event);
+    logger.info(`PaperLedger: recorded deposit US$${amountUsd.toFixed(2)}`);
+  }
+
+  getDeposits(): Deposit[] {
+    return this.events
+      .filter((e): e is DepositEvent => e.type === 'deposit')
+      .map((e) => ({ amountUsd: e.amountUsd, at: new Date(e.at), ...(e.note ? { note: e.note } : {}) }));
+  }
+
+  /** Available cash = Σ deposits − Σ (shares × price) over fills (buys subtract, sells add). */
+  cashBalance(): number {
+    let cash = 0;
+    for (const ev of this.events) {
+      if (ev.type === 'deposit') cash += ev.amountUsd;
+      else if (ev.type === 'fill') cash -= ev.shares * ev.filledPrice;
+    }
+    return Math.round(cash * 100) / 100;
   }
 
   // ── Private helpers ─────────────────────────────────────────────────────────
