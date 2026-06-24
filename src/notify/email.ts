@@ -32,12 +32,20 @@ export class EmailNotifier implements Notifier {
   }
 
   private async email(subject: string, text: string): Promise<void> {
-    try {
-      await this.transporter.sendMail({ from: this.from, to: this.to, subject, text });
-      logger.info(`EmailNotifier: sent "${subject}" to ${this.to}`);
-    } catch (err) {
-      // A failed notification must NOT crash the pipeline.
-      logger.error('EmailNotifier: failed to send email', { err });
+    // Retry once on transient SMTP/network failures before giving up.
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        await this.transporter.sendMail({ from: this.from, to: this.to, subject, text });
+        logger.info(`EmailNotifier: sent "${subject}" to ${this.to}`);
+        return;
+      } catch (err) {
+        if (attempt === 2) {
+          // A failed notification must NOT crash the pipeline.
+          logger.error('EmailNotifier: failed to send email after retry', { err });
+          return;
+        }
+        await new Promise((r) => setTimeout(r, 2000));
+      }
     }
   }
 

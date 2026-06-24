@@ -71,4 +71,21 @@ describe('SignalOrchestrator.runCycle', () => {
     expect(sell!.rationale).toContain('Vender tus 5 acciones');
     expect(recs.find((r) => r.ticker === 'AAA')?.action).toBe('buy');
   });
+
+  it('still sends a heartbeat plan when holding positions but no new signals', async () => {
+    const uni = { list: async () => [inst('DDD')] };
+    const holdEngine = {
+      evaluate: async (ticker: string) => ({ ticker, action: 'hold' as const, strength: 0, confidence: 0, reasons: [], timestamp: new Date() }),
+    };
+    const notifier: Notifier & { sendText: jest.Mock } = { send: jest.fn(async () => {}), sendText: jest.fn(async () => {}) };
+    const heldLedger: Ledger = {
+      recordRecommendation: jest.fn(), recordFill: jest.fn(),
+      openPositions: () => [{ ticker: 'DDD', shares: 1, entryPrice: 10, openedAt: new Date() }],
+      getRecommendations: () => [], getFills: () => [],
+    };
+    const orch = new SignalOrchestrator(uni, data, holdEngine, notifier, heldLedger, sizing);
+    const recs = await orch.runCycle();
+    expect(recs).toHaveLength(0); // no new buys/sells
+    expect(notifier.sendText).toHaveBeenCalledTimes(1); // but still emails the saldo
+  });
 });
