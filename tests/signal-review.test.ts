@@ -15,6 +15,9 @@ function ledgerWith(positions: PaperPosition[], recs: Recommendation[]): Ledger 
     openPositions: () => positions,
     getRecommendations: () => recs,
     getFills: () => [],
+    recordDeposit: () => {},
+    getDeposits: () => [],
+    cashBalance: () => 0,
   };
 }
 

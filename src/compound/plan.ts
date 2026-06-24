@@ -17,6 +17,10 @@ export function formatPlan(
   const sells = recommendations.filter((r) => r.action === 'sell');
   const lines: string[] = [`📊 Plan de inversión (${now.toISOString().slice(0, 10)})`, ''];
 
+  // ── Efectivo disponible ──
+  lines.push(`💵 Efectivo disponible: ${money(portfolio.cashUsd)}  ·  🧮 Total cuenta: ${money(portfolio.accountValueUsd)}`);
+  lines.push('');
+
   // ── Saldo / cartera ──
   lines.push('💼 Tu cartera (saldo actual):');
   if (portfolio.holdings.length === 0) {

@@ -76,35 +76,47 @@ export class SignalOrchestrator {
       }
     }
 
-    const buys = buyCandidates
+    // Build the account snapshot once (cash + holdings) — used for cash-aware
+    // sizing AND the email. Recommendations don't change holdings, so it stays valid.
+    const portfolio = await buildPortfolio(this.ledger, this.data);
+
+    // Size buys against AVAILABLE CASH: never recommend more than you can pay for.
+    // Per-trade size scales with total account value; capped by remaining cash.
+    const bankroll = portfolio.accountValueUsd > 0 ? portfolio.accountValueUsd : this.sizing.bankrollUsd;
+    let availableCash = portfolio.cashUsd;
+    const buys: Recommendation[] = [];
+    for (const { signal, inst } of buyCandidates
       .sort((a, b) => b.signal.confidence - a.signal.confidence)
-      .slice(0, MAX_SIGNALS_PER_CYCLE)
-      .map(({ signal, inst }) => this.toBuyRecommendation(signal, inst));
+      .slice(0, MAX_SIGNALS_PER_CYCLE)) {
+      const target = sizePosition(signal.confidence, { ...this.sizing, bankrollUsd: bankroll });
+      const amount = Math.min(target, availableCash);
+      if (amount < this.sizing.minUsd) continue; // not enough cash left
+      availableCash -= amount;
+      buys.push(this.toBuyRecommendation(signal, inst, Math.round(amount * 100) / 100));
+    }
 
     // Sells first — exits matter more than new entries.
     const recommendations = [...sells, ...buys];
     for (const rec of recommendations) this.ledger.recordRecommendation(rec);
 
-    // One consolidated plan email per run (buys + sells + current balance).
-    // Send daily whenever there's anything to report OR any holding, so you always
-    // get a heartbeat + your saldo — even on quiet days with no new signals.
-    const portfolio = await buildPortfolio(this.ledger, this.data);
-    if (recommendations.length > 0 || portfolio.holdings.length > 0) {
+    // One consolidated plan email per run (buys + sells + cash + balance).
+    // Send daily whenever there's anything to report OR any holding/cash.
+    if (recommendations.length > 0 || portfolio.holdings.length > 0 || portfolio.cashUsd > 0) {
       await this.notifier.sendText(formatPlan(recommendations, portfolio));
     }
 
     logger.info(
-      `SignalOrchestrator: cycle complete — ${sells.length} sell(s), ${buys.length} buy(s)`
+      `SignalOrchestrator: cycle complete — ${sells.length} sell(s), ${buys.length} buy(s), cash US$${portfolio.cashUsd.toFixed(2)}`
     );
     return recommendations;
   }
 
-  private toBuyRecommendation(signal: Signal, inst: Instrument): Recommendation {
+  private toBuyRecommendation(signal: Signal, inst: Instrument, amountUsd: number): Recommendation {
     return {
       id: randomUUID(),
       ticker: signal.ticker,
       action: 'buy',
-      suggestedAmountUsd: sizePosition(signal.confidence, this.sizing),
+      suggestedAmountUsd: amountUsd,
       confidence: signal.confidence,
       rationale: `${inst.name}: ${signal.reasons.join(', ')}`,
       createdAt: new Date(),

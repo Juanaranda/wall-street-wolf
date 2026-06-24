@@ -11,6 +11,9 @@ function ledgerWith(positions: PaperPosition[]): Ledger {
     openPositions: () => positions,
     getRecommendations: () => [],
     getFills: () => [],
+    recordDeposit: () => {},
+    getDeposits: () => [],
+    cashBalance: () => 0,
   };
 }
 
@@ -51,6 +54,8 @@ describe('formatPlan', () => {
     totalValueUsd: 24,
     totalPnlUsd: 2.4,
     totalPnlPct: 0.111,
+    cashUsd: 50,
+    accountValueUsd: 74,
   };
 
   it('consolidates balance + buys + sells in one message', () => {
@@ -69,7 +74,7 @@ describe('formatPlan', () => {
   });
 
   it('shows placeholders when there is nothing to do', () => {
-    const empty = { holdings: [], totalCostUsd: 0, totalValueUsd: 0, totalPnlUsd: 0, totalPnlPct: null };
+    const empty = { holdings: [], totalCostUsd: 0, totalValueUsd: 0, totalPnlUsd: 0, totalPnlPct: null, cashUsd: 0, accountValueUsd: 0 };
     const msg = formatPlan([], empty);
     expect(msg).toContain('sin nuevas compras');
     expect(msg).toContain('sin ventas');

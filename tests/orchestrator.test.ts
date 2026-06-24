@@ -36,6 +36,9 @@ describe('SignalOrchestrator.runCycle', () => {
       openPositions: () => [],
       getRecommendations: () => [],
       getFills: () => [],
+      recordDeposit: () => {},
+      getDeposits: () => [],
+      cashBalance: () => 10000,
     };
 
     const orch = new SignalOrchestrator(universe, data, engine, notifier, ledger, sizing);
@@ -59,6 +62,9 @@ describe('SignalOrchestrator.runCycle', () => {
       openPositions: () => [{ ticker: 'CCC', shares: 5, entryPrice: 20, openedAt: new Date() }],
       getRecommendations: () => [],
       getFills: () => [],
+      recordDeposit: () => {},
+      getDeposits: () => [],
+      cashBalance: () => 10000,
     };
 
     const orch = new SignalOrchestrator(universe, data, engine, notifier, ledger, sizing);
@@ -82,6 +88,7 @@ describe('SignalOrchestrator.runCycle', () => {
       recordRecommendation: jest.fn(), recordFill: jest.fn(),
       openPositions: () => [{ ticker: 'DDD', shares: 1, entryPrice: 10, openedAt: new Date() }],
       getRecommendations: () => [], getFills: () => [],
+      recordDeposit: () => {}, getDeposits: () => [], cashBalance: () => 0,
     };
     const orch = new SignalOrchestrator(uni, data, holdEngine, notifier, heldLedger, sizing);
     const recs = await orch.runCycle();
