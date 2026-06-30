@@ -1,5 +1,7 @@
 import { SignalEngine, LlmGatedSignalEngine } from './index';
 import { MomentumEngine } from './strategies/momentum';
+import { MeanReversionEngine } from './strategies/mean-reversion';
+import { TrendFollowingEngine } from './strategies/trend-following';
 import { SentimentLlmCaller } from './sentiment-gate';
 
 /**
@@ -24,4 +26,28 @@ export function createSignalEngine(): SignalEngine {
     strengthThreshold: parseFloat(process.env['SENTIMENT_MIN_STRENGTH'] ?? '0.5'),
     maxDailyCostUsd: parseFloat(process.env['LLM_DAILY_CAP_USD'] ?? '0.10'),
   });
+}
+
+/** A named strategy engine with its investment horizon (for multi-strategy signals). */
+export interface StrategyEngine {
+  name: string;
+  horizon: string;
+  engine: SignalEngine;
+  /** Only the exit-authority strategy may trigger SELLs on held positions. */
+  exitAuthority?: boolean;
+}
+
+/**
+ * The full set of strategies run each cycle. Each emits its own signals over one
+ * shared cash pool; recommendations are tagged with the strategy + horizon.
+ *   - Momentum (medium): trend persistence — the robust core (optionally LLM-gated).
+ *   - Mean-reversion (short): buy deep dips, exit on the bounce — more frequent.
+ *   - Trend-following (long): SMA50/200 regime — slow, low turnover.
+ */
+export function createSignalEngines(): StrategyEngine[] {
+  return [
+    { name: 'Momentum', horizon: 'mediano plazo', engine: createSignalEngine(), exitAuthority: true },
+    { name: 'Mean-reversion', horizon: 'corto plazo', engine: new MeanReversionEngine() },
+    { name: 'Trend-following', horizon: 'largo plazo', engine: new TrendFollowingEngine() },
+  ];
 }

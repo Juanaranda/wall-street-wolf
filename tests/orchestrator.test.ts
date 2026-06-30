@@ -41,7 +41,7 @@ describe('SignalOrchestrator.runCycle', () => {
       cashBalance: () => 10000,
     };
 
-    const orch = new SignalOrchestrator(universe, data, engine, notifier, ledger, sizing);
+    const orch = new SignalOrchestrator(universe, data, [{ name: 'Test', horizon: 'mediano plazo', engine, exitAuthority: true }], notifier, ledger, sizing);
     const recs = await orch.runCycle();
 
     // AAA passes (buy); BBB below confidence; CCC is a sell but we don't hold it → ignored.
@@ -67,7 +67,7 @@ describe('SignalOrchestrator.runCycle', () => {
       cashBalance: () => 10000,
     };
 
-    const orch = new SignalOrchestrator(universe, data, engine, notifier, ledger, sizing);
+    const orch = new SignalOrchestrator(universe, data, [{ name: 'Test', horizon: 'mediano plazo', engine, exitAuthority: true }], notifier, ledger, sizing);
     const recs = await orch.runCycle();
 
     // We hold CCC and its signal is 'sell' → exit; AAA is still a new buy.
@@ -90,7 +90,7 @@ describe('SignalOrchestrator.runCycle', () => {
       getRecommendations: () => [], getFills: () => [],
       recordDeposit: () => {}, getDeposits: () => [], cashBalance: () => 0,
     };
-    const orch = new SignalOrchestrator(uni, data, holdEngine, notifier, heldLedger, sizing);
+    const orch = new SignalOrchestrator(uni, data, [{ name: 'Test', horizon: 'mediano plazo', engine: holdEngine }], notifier, heldLedger, sizing);
     const recs = await orch.runCycle();
     expect(recs).toHaveLength(0); // no new buys/sells
     expect(notifier.sendText).toHaveBeenCalledTimes(1); // but still emails the saldo

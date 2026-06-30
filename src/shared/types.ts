@@ -237,6 +237,10 @@ export interface Recommendation {
   confidence: number; // 0–1
   rationale: string;
   createdAt: Date;
+  /** Which strategy generated it (e.g. 'Momentum'). */
+  strategy?: string;
+  /** Investment horizon label (e.g. 'mediano plazo'). */
+  horizon?: string;
 }
 
 /** A paper-trading position opened off a recommendation. */

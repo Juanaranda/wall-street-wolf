@@ -4,6 +4,14 @@ import { PortfolioSummary } from './portfolio';
 const money = (n: number) => `US$${n.toFixed(2)}`;
 const pct = (n: number | null) => (n === null ? '—' : `${n >= 0 ? '+' : ''}${(n * 100).toFixed(1)}%`);
 
+const HORIZON_RANK: Record<string, number> = { 'corto plazo': 0, 'mediano plazo': 1, 'largo plazo': 2 };
+
+/** Unique horizons present in the buys, sorted short→long. */
+function horizonOrder(buys: { horizon?: string }[]): string[] {
+  const set = [...new Set(buys.map((b) => b.horizon ?? 'otro'))];
+  return set.sort((a, b) => (HORIZON_RANK[a] ?? 9) - (HORIZON_RANK[b] ?? 9));
+}
+
 /**
  * One consolidated "investment plan" message: current balance (saldo) + all buys
  * and sells together. Replaces the old one-email-per-recommendation behaviour.
@@ -39,16 +47,24 @@ export function formatPlan(
   }
   lines.push('');
 
-  // ── Compras ──
+  // ── Compras (agrupadas por horizonte) ──
   lines.push('🟢 COMPRAR hoy:');
   if (buys.length === 0) lines.push('  (sin nuevas compras)');
-  else for (const b of buys) lines.push(`  • ${b.ticker} ~${money(b.suggestedAmountUsd)} (conf ${(b.confidence * 100).toFixed(0)}%) — ${b.rationale}`);
+  else {
+    for (const horizon of horizonOrder(buys)) {
+      lines.push(`  [${horizon}]`);
+      for (const b of buys.filter((r) => (r.horizon ?? 'otro') === horizon)) {
+        const tag = b.strategy ? ` · ${b.strategy}` : '';
+        lines.push(`   • ${b.ticker} ~${money(b.suggestedAmountUsd)} (conf ${(b.confidence * 100).toFixed(0)}%${tag}) — ${b.rationale}`);
+      }
+    }
+  }
   lines.push('');
 
   // ── Ventas ──
   lines.push('🔴 VENDER hoy:');
   if (sells.length === 0) lines.push('  (sin ventas)');
-  else for (const s of sells) lines.push(`  • ${s.ticker} — ${s.rationale}`);
+  else for (const s of sells) lines.push(`  • ${s.ticker}${s.horizon ? ` [${s.horizon}]` : ''} — ${s.rationale}`);
   lines.push('');
 
   lines.push('⚠️ Sugerencias, no asesoría. Ejecuta manual en Fintual. Paper.');
