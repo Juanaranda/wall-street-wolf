@@ -18,8 +18,10 @@ async function main(): Promise<void> {
   } else {
     console.log(`\n📲 ${recs.length} señal(es) — ejecuta manual en Fintual:\n`);
     for (const r of recs) {
+      const verb = r.action === 'sell' ? '🔴 VENDER' : '🟢 COMPRAR';
+      const tag = r.horizon ? ` [${r.horizon}${r.strategy ? ` · ${r.strategy}` : ''}]` : '';
       console.log(
-        ` • 🟢 COMPRAR ${r.ticker}  ~US$${r.suggestedAmountUsd}  ` +
+        ` • ${verb} ${r.ticker}${tag}  ~US$${r.suggestedAmountUsd}  ` +
           `(confianza ${(r.confidence * 100).toFixed(0)}%)\n     ${r.rationale}\n     id: ${r.id}`
       );
     }
